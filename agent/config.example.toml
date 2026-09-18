@@ -1,0 +1,25 @@
+# Copy to /etc/warden-agent/config.toml (Linux) or
+# %ProgramData%\Warden\agent\config.toml (Windows) and fill in before first
+# start. Values here take precedence over the WARDEN_AGENT_* environment
+# variables of the same name; anything left out falls back to the
+# environment variable, then to the default in warden_agent.config.
+
+server_url = "https://warden.example.internal"
+
+# One-time token issued by an administrator (POST /api/v1/enrollment-tokens
+# on the server). Only needed for the very first start -- once enrolled,
+# the agent's id and key live in state_path below and this line can be
+# removed.
+enrollment_token = "REPLACE-WITH-A-REAL-ENROLLMENT-TOKEN"
+
+# Defaults to the OS hostname if left unset.
+# hostname = "WORKSTATION-07"
+
+poll_interval_seconds = 60
+inventory_interval_seconds = 3600
+
+# Must be at least 4 (the request-window cap, constitution principle 3/4).
+retention_hours = 8
+
+buffer_path = "/var/lib/warden-agent/buffer.db"
+state_path = "/var/lib/warden-agent/state.json"
