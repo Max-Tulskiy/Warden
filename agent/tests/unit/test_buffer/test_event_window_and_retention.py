@@ -1,12 +1,31 @@
 """Tests for the local SQLite buffer (constitution principles 2 and 4)."""
 
+import os
+import stat
+import sys
 from datetime import UTC, datetime, timedelta
+
+import pytest
 
 from warden_agent.buffer import Buffer
 
 
 def _buffer(tmp_path):
     return Buffer(tmp_path / "buffer.db")
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="POSIX permission bits, not meaningful on Windows"
+)
+def test_buffer_creates_the_database_file_as_owner_only_regardless_of_umask(tmp_path):
+    path = tmp_path / "buffer.db"
+    previous_umask = os.umask(0o022)
+    try:
+        _buffer(tmp_path)
+    finally:
+        os.umask(previous_umask)
+
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_events_in_window_returns_only_events_inside_the_range(tmp_path):

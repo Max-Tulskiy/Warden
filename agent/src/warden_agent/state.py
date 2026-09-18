@@ -26,3 +26,4 @@ class AgentState(BaseModel):
 
     def save(self, path: Path) -> None:
         path.write_text(json.dumps(self.model_dump()), encoding="utf-8")
+        path.chmod(0o600)

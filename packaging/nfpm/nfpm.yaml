@@ -34,6 +34,8 @@ contents:
 
   - dst: /var/lib/warden-agent
     type: dir
+    file_info:
+      mode: 0700
 
 scripts:
   postinstall: ./scripts/postinstall.sh

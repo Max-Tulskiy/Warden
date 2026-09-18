@@ -17,6 +17,7 @@ ExecStart=/usr/bin/warden-agent --config /etc/warden-agent/config.toml
 Restart=on-failure
 RestartSec=5
 StateDirectory=warden-agent
+StateDirectoryMode=0700
 WorkingDirectory=/var/lib/warden-agent
 
 [Install]

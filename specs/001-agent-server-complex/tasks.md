@@ -66,3 +66,7 @@
 - [x] T-39. Run `ruff`, `mypy`, `bandit` on `server/` and `agent/` -- all clean
 - [x] T-40. Run the full test suite of every module -- server 32/32 (97% cov), agent 89/89 + 5 platform-gated skips (81% cov), web 6/6, build clean
 - [x] T-41. Add a panel-side enrollment-token flow for registering new agents
+
+## Security hardening
+
+- [x] T-42. Fix insecure Linux agent file permissions found by `security-reports/codex-security/scan_warden_20260916_001` (finding 1, medium): `AgentState.save()` and `Buffer.__init__` now `chmod(0o600)` the state file and SQLite buffer regardless of process umask; `packaging/systemd/warden-agent.service` sets `StateDirectoryMode=0700` and `packaging/nfpm/nfpm.yaml` sets `file_info.mode: 0700` on `/var/lib/warden-agent`; added umask-022 regression tests for both file creators

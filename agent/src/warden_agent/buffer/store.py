@@ -47,6 +47,7 @@ class Buffer:
     def __init__(self, path: Path) -> None:
         self._lock = threading.Lock()
         self._connection = sqlite3.connect(str(path), check_same_thread=False)
+        path.chmod(0o600)
         with self._lock:
             self._connection.executescript(_SCHEMA)
             self._connection.commit()
