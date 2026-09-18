@@ -273,6 +273,23 @@ paths:
           type: string
           format: date
           title: Report Date
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 2000
+          minimum: 1
+          default: 500
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
       responses:
         '200':
           description: Successful Response
@@ -305,6 +322,23 @@ paths:
           type: string
           format: uuid
           title: Agent Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 2000
+          minimum: 1
+          default: 500
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
       responses:
         '200':
           description: Successful Response
@@ -521,10 +555,12 @@ components:
         hardware:
           additionalProperties: true
           type: object
+          maxProperties: 10000
           title: Hardware
         software:
           additionalProperties: true
           type: object
+          maxProperties: 10000
           title: Software
       type: object
       title: InventoryIn
@@ -559,6 +595,7 @@ components:
           items:
             $ref: '#/components/schemas/EventIn'
           type: array
+          maxItems: 10000
           title: Events
       type: object
       required:

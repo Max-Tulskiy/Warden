@@ -70,19 +70,34 @@ export function requestWindow(
   });
 }
 
+export interface PageParams {
+  limit?: number;
+  offset?: number;
+}
+
 export function getEvents(
   token: string,
   agentId: string,
   reportDate: string,
+  page: PageParams = {},
 ): Promise<EventRecord[]> {
-  return request<EventRecord[]>(`/agents/${agentId}/events?report_date=${reportDate}`, {
-    token,
-  });
+  const params = new URLSearchParams({ report_date: reportDate });
+  if (page.limit !== undefined) params.set("limit", String(page.limit));
+  if (page.offset !== undefined) params.set("offset", String(page.offset));
+  return request<EventRecord[]>(`/agents/${agentId}/events?${params}`, { token });
 }
 
 export function getInventoryChanges(
   token: string,
   agentId: string,
+  page: PageParams = {},
 ): Promise<InventoryChange[]> {
-  return request<InventoryChange[]>(`/agents/${agentId}/inventory/changes`, { token });
+  const params = new URLSearchParams();
+  if (page.limit !== undefined) params.set("limit", String(page.limit));
+  if (page.offset !== undefined) params.set("offset", String(page.offset));
+  const query = params.toString();
+  return request<InventoryChange[]>(
+    `/agents/${agentId}/inventory/changes${query ? `?${query}` : ""}`,
+    { token },
+  );
 }

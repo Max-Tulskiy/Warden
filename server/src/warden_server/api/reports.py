@@ -20,6 +20,9 @@ router = APIRouter(
     prefix="/api/v1", tags=["reports"], dependencies=[Depends(require_operator)]
 )
 
+DEFAULT_PAGE_SIZE = 500
+MAX_PAGE_SIZE = 2000
+
 
 @router.get("/agents", response_model=list[AgentOut])
 def list_agents(db: Session = Depends(get_db)) -> list[Agent]:
@@ -30,6 +33,8 @@ def list_agents(db: Session = Depends(get_db)) -> list[Agent]:
 def daily_report(
     agent_id: uuid.UUID,
     report_date: date = Query(default_factory=lambda: datetime.now(UTC).date()),
+    limit: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[Event]:
     """Events received for the station on a given day (constitution: daily reports)."""
@@ -44,6 +49,8 @@ def daily_report(
                 Event.occurred_at < day_end,
             )
             .order_by(Event.occurred_at)
+            .limit(limit)
+            .offset(offset)
         )
         .scalars()
         .all()
@@ -54,13 +61,18 @@ def daily_report(
     "/agents/{agent_id}/inventory/changes", response_model=list[InventoryChangeOut]
 )
 def inventory_changes(
-    agent_id: uuid.UUID, db: Session = Depends(get_db)
+    agent_id: uuid.UUID,
+    limit: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
 ) -> list[InventoryChange]:
     return list(
         db.execute(
             select(InventoryChange)
             .where(InventoryChange.agent_id == agent_id)
             .order_by(InventoryChange.detected_at.desc())
+            .limit(limit)
+            .offset(offset)
         )
         .scalars()
         .all()

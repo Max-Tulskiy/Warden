@@ -6,6 +6,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+#: A Debian-family desktop typically carries 2,000-4,500 installed
+#: packages; this leaves headroom for a heavily loaded workstation while
+#: still bounding one snapshot's size (CWE-770).
+MAX_INVENTORY_ENTRIES = 10_000
+
 
 class InventoryIn(BaseModel):
     """The body of `POST /api/v1/agents/{id}/inventory`.
@@ -15,8 +20,12 @@ class InventoryIn(BaseModel):
     actually changed (constitution D-4).
     """
 
-    hardware: dict[str, Any] = Field(default_factory=dict)
-    software: dict[str, Any] = Field(default_factory=dict)
+    hardware: dict[str, Any] = Field(
+        default_factory=dict, max_length=MAX_INVENTORY_ENTRIES
+    )
+    software: dict[str, Any] = Field(
+        default_factory=dict, max_length=MAX_INVENTORY_ENTRIES
+    )
 
 
 class InventoryChangeOut(BaseModel):

@@ -4,13 +4,21 @@
 # {$WARDEN_DOMAIN} -- fine for a lab deployment; point a real CA-issued
 # certificate here instead for anything reachable from the public internet.
 {$WARDEN_DOMAIN:localhost} {
-    tls internal
+	tls internal
 
-    handle /api/* {
-        reverse_proxy server:8000
-    }
+	handle /api/* {
+		# Bounds one request's body ahead of the application-level event
+		# count and inventory entry limits (server/src/warden_server/
+		# schemas/{event,inventory}.py) -- a second line of defense
+		# against an authenticated agent sending an oversized payload
+		# (CWE-770).
+		request_body {
+			max_size 16MB
+		}
+		reverse_proxy server:8000
+	}
 
-    handle {
-        reverse_proxy web:80
-    }
+	handle {
+		reverse_proxy web:80
+	}
 }

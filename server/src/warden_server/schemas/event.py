@@ -8,6 +8,14 @@ from pydantic import BaseModel, Field, field_validator
 
 from warden_server.models.event import EventCategory
 
+#: Generous headroom over a realistic worst case: the process collector
+#: reports process *starts*, not a snapshot every pass, so even a busy
+#: 4-hour window (the request-window cap) realistically produces a low
+#: thousands of events across all categories combined, not tens of
+#: thousands. Bounds one report's memory footprint (CWE-770) without
+#: rejecting a legitimate agent.
+MAX_REPORT_EVENTS = 10_000
+
 
 class EventIn(BaseModel):
     category: EventCategory
@@ -31,7 +39,7 @@ class ReportIn(BaseModel):
     """The body of `POST /api/v1/agents/{id}/reports`: an agent's answer to one task."""
 
     task_id: uuid.UUID
-    events: list[EventIn] = Field(default_factory=list)
+    events: list[EventIn] = Field(default_factory=list, max_length=MAX_REPORT_EVENTS)
 
 
 class EventOut(BaseModel):

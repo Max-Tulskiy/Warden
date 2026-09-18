@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 
 from warden_server.models.audit import AuditLogEntry
+from warden_server.schemas.event import MAX_REPORT_EVENTS
 
 
 def test_full_window_request_cycle(client, auth_headers, enrolled_agent, agent_headers):
@@ -240,3 +241,78 @@ def test_an_out_of_window_report_is_audited(
         )
     ).scalar_one()
     assert entry.target == task_id
+
+
+def test_a_report_over_the_event_limit_is_rejected_by_the_endpoint(
+    client, auth_headers, enrolled_agent, agent_headers
+):
+    agent_id = enrolled_agent["agent_id"]
+    window_start = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
+    task_id = _place_and_dispatch(
+        client, auth_headers, agent_headers, agent_id, window_start
+    )
+
+    response = client.post(
+        f"/api/v1/agents/{agent_id}/reports",
+        headers=agent_headers,
+        json={
+            "task_id": task_id,
+            "events": [
+                {
+                    "category": "processes",
+                    "occurred_at": (window_start + timedelta(minutes=1)).isoformat(),
+                    "payload": {},
+                }
+                for _ in range(MAX_REPORT_EVENTS + 1)
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_daily_report_events_are_paginated(
+    client, auth_headers, enrolled_agent, agent_headers
+):
+    agent_id = enrolled_agent["agent_id"]
+    window_start = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
+    task_id = _place_and_dispatch(
+        client, auth_headers, agent_headers, agent_id, window_start
+    )
+    client.post(
+        f"/api/v1/agents/{agent_id}/reports",
+        headers=agent_headers,
+        json={
+            "task_id": task_id,
+            "events": [
+                {
+                    "category": "processes",
+                    "occurred_at": (window_start + timedelta(minutes=i)).isoformat(),
+                    "payload": {"pid": i},
+                }
+                for i in range(5)
+            ],
+        },
+    )
+    report_date = window_start.date().isoformat()
+
+    first_page = client.get(
+        f"/api/v1/agents/{agent_id}/events",
+        headers=auth_headers,
+        params={"report_date": report_date, "limit": 2},
+    )
+    assert [e["payload"]["pid"] for e in first_page.json()] == [0, 1]
+
+    second_page = client.get(
+        f"/api/v1/agents/{agent_id}/events",
+        headers=auth_headers,
+        params={"report_date": report_date, "limit": 2, "offset": 2},
+    )
+    assert [e["payload"]["pid"] for e in second_page.json()] == [2, 3]
+
+    over_limit = client.get(
+        f"/api/v1/agents/{agent_id}/events",
+        headers=auth_headers,
+        params={"report_date": report_date, "limit": 100_000},
+    )
+    assert over_limit.status_code == 422

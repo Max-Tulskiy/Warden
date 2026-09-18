@@ -14,25 +14,60 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Matches the server's own DEFAULT_PAGE_SIZE
+// (server/src/warden_server/api/reports.py) -- if a page comes back full,
+// there may be more to load.
+const PAGE_SIZE = 500;
+
 export function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
   const { token } = useAuth();
   const [reportDate, setReportDate] = useState(today());
   const [events, setEvents] = useState<EventRecord[]>([]);
+  const [hasMoreEvents, setHasMoreEvents] = useState(false);
   const [changes, setChanges] = useState<InventoryChange[]>([]);
+  const [hasMoreChanges, setHasMoreChanges] = useState(false);
   const [requestMessage, setRequestMessage] = useState<string | null>(null);
 
   const loadEvents = () => {
     if (!token || !agentId) return;
-    getEvents(token, agentId, reportDate).then(setEvents);
+    getEvents(token, agentId, reportDate, { limit: PAGE_SIZE }).then((page) => {
+      setEvents(page);
+      setHasMoreEvents(page.length === PAGE_SIZE);
+    });
+  };
+
+  const loadMoreEvents = () => {
+    if (!token || !agentId) return;
+    getEvents(token, agentId, reportDate, { limit: PAGE_SIZE, offset: events.length }).then(
+      (page) => {
+        setEvents((prev) => [...prev, ...page]);
+        setHasMoreEvents(page.length === PAGE_SIZE);
+      },
+    );
   };
 
   useEffect(loadEvents, [token, agentId, reportDate]);
 
-  useEffect(() => {
+  const loadChanges = () => {
     if (!token || !agentId) return;
-    getInventoryChanges(token, agentId).then(setChanges);
-  }, [token, agentId]);
+    getInventoryChanges(token, agentId, { limit: PAGE_SIZE }).then((page) => {
+      setChanges(page);
+      setHasMoreChanges(page.length === PAGE_SIZE);
+    });
+  };
+
+  const loadMoreChanges = () => {
+    if (!token || !agentId) return;
+    getInventoryChanges(token, agentId, { limit: PAGE_SIZE, offset: changes.length }).then(
+      (page) => {
+        setChanges((prev) => [...prev, ...page]);
+        setHasMoreChanges(page.length === PAGE_SIZE);
+      },
+    );
+  };
+
+  useEffect(loadChanges, [token, agentId]);
 
   const handleWindowRequest = async (windowStart: string, windowEnd: string) => {
     if (!token || !agentId) return;
@@ -93,6 +128,13 @@ export function AgentDetailPage() {
             />
           </div>
           <EventList events={events} />
+          {hasMoreEvents && (
+            <div style={{ padding: "14px 22px 4px 22px" }}>
+              <button type="button" onClick={loadMoreEvents}>
+                Показать ещё
+              </button>
+            </div>
+          )}
         </section>
 
         <section className="card">
@@ -100,6 +142,11 @@ export function AgentDetailPage() {
             Изменения конфигурации
           </h2>
           <ChangeTimeline changes={changes} />
+          {hasMoreChanges && (
+            <button type="button" onClick={loadMoreChanges}>
+              Показать ещё
+            </button>
+          )}
         </section>
       </div>
     </AppShell>
