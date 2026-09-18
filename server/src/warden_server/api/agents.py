@@ -1,0 +1,161 @@
+"""Agent-facing endpoints: enrollment, task polling, report and inventory upload.
+
+Together these implement the active-agent model of constitution D-1: the
+agent is always the one initiating a request; nothing here pushes to the
+agent.
+"""
+
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from warden_server.api.deps import require_agent, require_operator
+from warden_server.config import get_settings
+from warden_server.db import get_db
+from warden_server.models.agent import Agent, AgentStatus
+from warden_server.models.enrollment import EnrollmentToken
+from warden_server.models.operator import Operator
+from warden_server.models.task import Task, TaskStatus
+from warden_server.schemas.agent import EnrollRequest, EnrollResponse
+from warden_server.schemas.enrollment import EnrollmentTokenOut
+from warden_server.schemas.event import ReportIn
+from warden_server.schemas.inventory import InventoryIn
+from warden_server.schemas.task import TaskOut
+from warden_server.security import generate_secret_token, hash_secret_token
+from warden_server.services import tasks as tasks_service
+from warden_server.services.audit import log_event
+from warden_server.services.inventory import ingest_snapshot
+
+router = APIRouter(prefix="/api/v1", tags=["agents"])
+
+
+@router.post("/enrollment-tokens", response_model=EnrollmentTokenOut, status_code=201)
+def create_enrollment_token(
+    operator: Operator = Depends(require_operator), db: Session = Depends(get_db)
+) -> EnrollmentTokenOut:
+    """Issue a one-time token an administrator hands to a new agent."""
+    settings = get_settings()
+    token = generate_secret_token()
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(hours=settings.enrollment_token_ttl_hours)
+    db.add(
+        EnrollmentToken(
+            token_hash=hash_secret_token(token),
+            created_by=operator.username,
+            created_at=now,
+            expires_at=expires_at,
+        )
+    )
+    log_event(db, actor=operator.username, action="enrollment_token.create", target="-")
+    db.commit()
+    return EnrollmentTokenOut(token=token, expires_at=expires_at)
+
+
+@router.post("/enroll", response_model=EnrollResponse, status_code=201)
+def enroll(payload: EnrollRequest, db: Session = Depends(get_db)) -> EnrollResponse:
+    """Register a new agent against a one-time enrollment token."""
+    token_hash = hash_secret_token(payload.token)
+    token = db.execute(
+        select(EnrollmentToken).where(EnrollmentToken.token_hash == token_hash)
+    ).scalar_one_or_none()
+
+    now = datetime.now(UTC)
+    if token is None or token.used_at is not None or token.expires_at < now:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or used token")
+
+    agent_key = generate_secret_token()
+    agent = Agent(
+        hostname=payload.hostname,
+        os=payload.os,
+        agent_key_hash=hash_secret_token(agent_key),
+        status=AgentStatus.ACTIVE,
+        enrolled_at=now,
+        last_seen_at=now,
+    )
+    db.add(agent)
+    token.used_at = now
+    db.flush()  # populate agent.id before it is used in the audit log/response
+    log_event(
+        db,
+        actor=payload.hostname,
+        action="agent.enroll",
+        target=str(agent.id),
+        detail={"os": payload.os},
+    )
+    db.commit()
+    return EnrollResponse(agent_id=agent.id, agent_key=agent_key)
+
+
+@router.get("/agents/{agent_id}/tasks", response_model=list[TaskOut])
+def poll_tasks(
+    agent: Agent = Depends(require_agent), db: Session = Depends(get_db)
+) -> list[Task]:
+    """Return an agent's pending tasks and mark them dispatched."""
+    agent.last_seen_at = datetime.now(UTC)
+    pending = tasks_service.fetch_and_dispatch_pending(db, agent_id=agent.id)
+    if pending:
+        log_event(
+            db,
+            actor=str(agent.id),
+            action="agent.tasks_dispatched",
+            target=str(agent.id),
+            detail={"task_ids": [str(task.id) for task in pending]},
+        )
+    db.commit()
+    return pending
+
+
+@router.post("/agents/{agent_id}/reports", status_code=204, response_class=Response)
+def submit_report(
+    payload: ReportIn,
+    agent: Agent = Depends(require_agent),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Accept an agent's answer to a previously dispatched window-request task."""
+    task = db.get(Task, payload.task_id)
+    if task is None or task.agent_id != agent.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Unknown task")
+    if task.status == TaskStatus.COMPLETED:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="Task has already been completed"
+        )
+
+    tasks_service.complete_task(db, task=task, events=payload.events)
+    agent.last_seen_at = datetime.now(UTC)
+    log_event(
+        db,
+        actor=str(agent.id),
+        action="agent.report",
+        target=str(task.id),
+        detail={"event_count": len(payload.events)},
+    )
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/agents/{agent_id}/inventory", status_code=204, response_class=Response)
+def submit_inventory(
+    payload: InventoryIn,
+    agent: Agent = Depends(require_agent),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Accept a periodic inventory snapshot; doubles as the agent's heartbeat."""
+    agent.last_seen_at = datetime.now(UTC)
+    log_event(
+        db, actor=str(agent.id), action="agent.inventory_snapshot", target=str(agent.id)
+    )
+    change = ingest_snapshot(
+        db, agent_id=agent.id, hardware=payload.hardware, software=payload.software
+    )
+    if change is not None:
+        log_event(
+            db,
+            actor=str(agent.id),
+            action="agent.inventory_change",
+            target=str(agent.id),
+            detail={"change_id": str(change.id)},
+        )
+    db.commit()
+    return Response(status_code=204)
