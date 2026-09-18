@@ -6,9 +6,11 @@ agent.
 """
 
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from warden_server.api.deps import require_agent, require_operator
@@ -57,13 +59,35 @@ def create_enrollment_token(
 def enroll(payload: EnrollRequest, db: Session = Depends(get_db)) -> EnrollResponse:
     """Register a new agent against a one-time enrollment token."""
     token_hash = hash_secret_token(payload.token)
-    token = db.execute(
-        select(EnrollmentToken).where(EnrollmentToken.token_hash == token_hash)
-    ).scalar_one_or_none()
-
     now = datetime.now(UTC)
-    if token is None or token.used_at is not None or token.expires_at < now:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or used token")
+    invalid_token = HTTPException(
+        status.HTTP_400_BAD_REQUEST, detail="Invalid or used token"
+    )
+
+    # Claimed with a single conditional UPDATE rather than a SELECT
+    # followed by a Python-side check, so two concurrent requests for the
+    # same token cannot both observe it as unused (CWE-362): only one
+    # UPDATE can ever match the `used_at IS NULL` row, and `rowcount`
+    # tells the loser it lost the race.
+    claimed = cast(
+        CursorResult,
+        db.execute(
+            update(EnrollmentToken)
+            .where(
+                EnrollmentToken.token_hash == token_hash,
+                EnrollmentToken.used_at.is_(None),
+                EnrollmentToken.expires_at >= now,
+            )
+            .values(used_at=now)
+            .execution_options(synchronize_session=False)
+        ),
+    )
+    if claimed.rowcount != 1:
+        log_event(
+            db, actor=payload.hostname, action="agent.enroll_rejected", target="-"
+        )
+        db.commit()
+        raise invalid_token
 
     agent_key = generate_secret_token()
     agent = Agent(
@@ -75,7 +99,6 @@ def enroll(payload: EnrollRequest, db: Session = Depends(get_db)) -> EnrollRespo
         last_seen_at=now,
     )
     db.add(agent)
-    token.used_at = now
     db.flush()  # populate agent.id before it is used in the audit log/response
     log_event(
         db,
