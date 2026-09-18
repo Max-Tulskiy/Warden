@@ -1,0 +1,118 @@
+{
+  "completeness": "complete",
+  "deferred": [],
+  "documentType": "codex-security.coverage",
+  "excludePaths": [],
+  "explicitExclusions": [
+    {
+      "pattern": ".env",
+      "reason": "Ignored local deployment state, not tracked product source. It contained placeholder values and should not be used for production; retained as local deployment risk rather than canonical source finding."
+    },
+    {
+      "pattern": ".venv/",
+      "reason": "Virtual environments and installed dependencies were not treated as product source."
+    },
+    {
+      "pattern": "web/node_modules/",
+      "reason": "Dependency directory is ignored and was not present in the authorized source inventory."
+    },
+    {
+      "pattern": "dist/ and build outputs",
+      "reason": "Generated build artifacts were out of scope except where packaging definitions referenced them."
+    }
+  ],
+  "includePaths": [
+    "."
+  ],
+  "inventoryStrategy": "repository",
+  "mode": "repository",
+  "openQuestions": [
+    {
+      "question": "Actual inherited filesystem permissions for package-installed `/etc/warden-agent/config.toml` and `%ProgramData%\\Warden\\agent\\config.toml` should be verified on built packages."
+    },
+    {
+      "question": "Any external infrastructure rate limits in front of Caddy/FastAPI were not supplied to this source scan."
+    }
+  ],
+  "scanId": "29d9d1c1-fdf1-485f-92e4-6717f5d82088",
+  "schemaVersion": "1.0",
+  "surfaces": [
+    {
+      "disposition": "reported",
+      "id": "operator_auth",
+      "label": "Operator authentication and session authorization",
+      "notes": "Reported missing throttling and failed-login audit. Password hashing uses Argon2id and invalid-credential messages are generic.",
+      "receiptRefs": []
+    },
+    {
+      "disposition": "reported",
+      "id": "agent_enrollment",
+      "label": "Agent enrollment token lifecycle",
+      "notes": "Reported non-atomic one-time token consumption. Sequential token reuse is rejected; concurrency remains unguarded.",
+      "receiptRefs": []
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "agent_auth",
+      "label": "Per-agent API authentication",
+      "notes": "`require_agent` binds the supplied key to the path `agent_id` and active status; no cross-agent key reuse issue was found.",
+      "receiptRefs": []
+    },
+    {
+      "disposition": "reported",
+      "id": "window_request_flow",
+      "label": "Window request placement, polling, and report ingestion",
+      "notes": "Reported missing server-side validation that event timestamps fit the task window. Operator request placement and stock-agent response enforce the four-hour cap.",
+      "receiptRefs": []
+    },
+    {
+      "disposition": "reported",
+      "id": "agent_upload_limits",
+      "label": "Agent report and inventory upload resource limits",
+      "notes": "Reported unbounded report arrays, arbitrary JSON inventory payloads, and unpaginated operator reads.",
+      "receiptRefs": []
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "inventory_ingestion",
+      "label": "Inventory snapshot and change detection",
+      "notes": "Snapshots are append-only and changes are recorded separately; no SQL injection or overwrite issue found.",
+      "receiptRefs": []
+    },
+    {
+      "disposition": "reported",
+      "id": "agent_local_state",
+      "label": "Agent local state, buffer, and package permissions",
+      "notes": "The older Linux state/buffer permission issue appears fixed in current source. Reported remaining setup-time config-token permission gap.",
+      "receiptRefs": []
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "collector_backends",
+      "label": "Platform collectors and local parsers",
+      "notes": "No command injection path found; browser history SQLite queries use fixed SQL with parameters; Windows PrintService XML parsing is local OS event data, not a remote XML interface.",
+      "receiptRefs": []
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "web_panel_rendering",
+      "label": "React panel rendering and API client",
+      "notes": "Agent-controlled strings are rendered as React text nodes. No raw HTML or eval-like sink was found. JWT in localStorage remains XSS-sensitive, but no exploitable XSS source/sink pair was identified.",
+      "receiptRefs": []
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "deployment_ci_supply_chain",
+      "label": "Docker, Caddy, CI, release, and dependency workflow",
+      "notes": "Compose requires database/JWT secret variables and routes traffic through Caddy TLS. Dependency advisories were not rerun in this scan; CI includes CodeQL and pip-audit.",
+      "receiptRefs": []
+    },
+    {
+      "disposition": "rejected",
+      "id": "rejected_local_env_defaults",
+      "label": "Ignored local .env placeholder values",
+      "notes": "A baseline worker flagged the local ignored `.env` as critical. It was not included as a canonical source finding because `.env` is explicitly ignored (`.gitignore:31`) and not tracked product source. The deployment risk remains real if the local placeholder file is used unchanged.",
+      "receiptRefs": []
+    }
+  ]
+}

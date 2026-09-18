@@ -1,0 +1,93 @@
+{
+  "documentType": "codex-security.scan-manifest",
+  "scan": {
+    "artifacts": [
+      {
+        "mediaType": "application/json",
+        "path": "findings.json",
+        "sha256": "8a771c75360f0624b70fcbc735ae289fc98dddbf10fa4187a2cdccc0f14a3ef3"
+      },
+      {
+        "mediaType": "application/json",
+        "path": "coverage.json",
+        "sha256": "03e0ca4d6f28f7225e9b17d8b20117a1efe0f40bc7184a40ae8c70cff9f7c4ca"
+      }
+    ],
+    "completedAt": "2026-09-16T15:24:46.018267Z",
+    "coverageRef": "coverage.json",
+    "findingsRef": "findings.json",
+    "id": "scan_warden_20260916_001",
+    "producer": {
+      "name": "codex-security-plugin",
+      "version": "0.1.24"
+    },
+    "scope": {
+      "artifactsReviewed": [
+        "server/src/warden_server/api/*.py",
+        "server/src/warden_server/security.py",
+        "server/src/warden_server/config.py",
+        "agent/src/warden_agent/**/*.py",
+        "web/src/**/*.ts*",
+        "docker-compose.yml",
+        "Caddyfile",
+        "packaging/**",
+        "docs/**",
+        "specs/**",
+        "AGENTS.md"
+      ],
+      "context": "No host-backed Codex Security aggregation tools were exposed in this session; the scan was completed headlessly and sealed with the local finalizer.",
+      "excludePaths": [],
+      "includePaths": [
+        "."
+      ],
+      "limitations": [
+        "Docker Compose was not started during this scan.",
+        "Dependency advisory checks were not rerun; the repository has a scheduled pip-audit workflow for server and agent dependencies."
+      ],
+      "runtimeStatus": "No full runtime stack was started. Validation used static source review plus a local file-mode reproduction through agent/.venv.",
+      "summary": "Prompt-only Codex Security repository scan of server, agent, web panel, packaging, deployment, documentation, specs, and the untracked AGENTS.md guidance file present in the worktree.",
+      "validationMode": "static source trace with targeted local reproduction"
+    },
+    "sealedAt": "2026-09-16T15:24:46.018267Z",
+    "startedAt": "2026-09-16T15:24:46.018267Z",
+    "status": "completed",
+    "target": {
+      "displayName": "Warden lab repository",
+      "kind": "git_worktree",
+      "revision": "eefb635ebb88b5b9d1c84724ea181fab4df55064",
+      "snapshotDigest": "codex-security-snapshot/v1:sha256:ee41cbef4dd857346b5fd91f8283467cfe26b72db8621394049cbd6e17a44c79",
+      "targetId": "e715cf06df39f7427a00f73f7919c84778f8e474dba09b520c621d877657235c"
+    },
+    "threatModel": {
+      "assets": [
+        "operator JWT signing secret and operator sessions",
+        "per-agent enrollment keys and X-Agent-Key credentials",
+        "local endpoint telemetry buffer: web history, process, printing, removable media, and inventory metadata",
+        "server-side PostgreSQL records and audit log"
+      ],
+      "assumptions": [
+        "Linux package defaults run the agent as root through systemd as documented by the service unit.",
+        "The default deployment path for Linux agents is /var/lib/warden-agent according to config.example.toml and systemd packaging."
+      ],
+      "attackerCapabilities": [
+        "local unprivileged user on a monitored workstation",
+        "network client that can reach public API endpoints",
+        "malicious or compromised enrolled agent limited to its own agent_id"
+      ],
+      "securityObjectives": [
+        "Only operators can issue enrollment tokens and read panel reports.",
+        "Only the enrolled agent possessing its own key can poll tasks or submit reports for that agent_id.",
+        "Sensitive local telemetry and persistent agent credentials are not readable by ordinary workstation users.",
+        "Server-side request windows remain bounded and auditable."
+      ],
+      "summary": "Warden separates operator, agent, and local workstation trust boundaries. Operator APIs use JWT bearer tokens, agents use per-agent keys in X-Agent-Key, and Linux/Windows agents collect sensitive endpoint telemetry into local storage before sending bounded reports to the server.",
+      "trustBoundaries": [
+        "browser panel to FastAPI operator API",
+        "agent process to FastAPI agent API over HTTPS",
+        "local unprivileged workstation users to root/LocalSystem agent state",
+        "reverse proxy TLS boundary in front of server and web containers"
+      ]
+    }
+  },
+  "schemaVersion": "1.0"
+}

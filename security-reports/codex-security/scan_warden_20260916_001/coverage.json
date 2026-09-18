@@ -1,0 +1,88 @@
+{
+  "completeness": "complete",
+  "deferred": [],
+  "documentType": "codex-security.coverage",
+  "excludePaths": [],
+  "explicitExclusions": [],
+  "includePaths": [
+    "."
+  ],
+  "inventoryStrategy": "repository",
+  "mode": "repository",
+  "scanId": "scan_warden_20260916_001",
+  "schemaVersion": "1.0",
+  "surfaces": [
+    {
+      "disposition": "no_issue_found",
+      "id": "surface_operator_auth",
+      "label": "Operator authentication and JWT authorization",
+      "notes": "Login, password hashing, JWT decode, and operator dependencies were reviewed. The source default JWT secret is weak for direct-from-source production runs, but the docker-compose deployment requires WARDEN_JWT_SECRET and documentation instructs replacement; retained as hardening guidance rather than a reportable exploit in the packaged deployment surface.",
+      "receiptRefs": [],
+      "riskArea": "authentication"
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "surface_agent_auth",
+      "label": "Agent enrollment and per-agent authentication",
+      "notes": "Enrollment tokens and agent keys are high entropy, server-side storage uses hashes, and `require_agent` binds the supplied key to the path `agent_id`.",
+      "receiptRefs": [],
+      "riskArea": "authentication/authorization"
+    },
+    {
+      "disposition": "reported",
+      "id": "surface_agent_local_storage",
+      "label": "Linux agent local state and event buffer permissions",
+      "notes": "Reported because packaged Linux defaults can create `state.json` and `buffer.db` as local-readable files.",
+      "receiptRefs": [],
+      "riskArea": "local credential and telemetry disclosure"
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "surface_window_requests",
+      "label": "Window request creation, polling, and report upload",
+      "notes": "Server caps request windows, verifies agent ownership for reports, and uses typed schemas for event categories.",
+      "receiptRefs": [],
+      "riskArea": "authorization/business logic"
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "surface_inventory_and_events",
+      "label": "Inventory ingestion and event storage",
+      "notes": "SQLAlchemy parameterized queries are used; event payloads are stored as JSON and rendered by React without direct HTML injection patterns.",
+      "receiptRefs": [],
+      "riskArea": "data integrity and injection"
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "surface_agent_collectors",
+      "label": "Agent collectors and OS integrations",
+      "notes": "Reviewed subprocess, SQLite history readers, removable-media, printing, process, and inventory collectors. Commands are fixed argument lists with `shell=False`; browser history reads use read-only parameterized SQLite queries.",
+      "receiptRefs": [],
+      "riskArea": "command execution/local parsing"
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "surface_web_panel",
+      "label": "React web panel API client and session state",
+      "notes": "No `dangerouslySetInnerHTML` or raw HTML sinks were found. JWT is stored in localStorage, which is a known XSS-sensitive choice, but no exploitable XSS source/sink pair was identified in this scan.",
+      "receiptRefs": [],
+      "riskArea": "XSS/session storage/CSRF"
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "surface_deployment",
+      "label": "Docker, Caddy, nginx, and package deployment",
+      "notes": "Docker compose requires database and JWT secrets, Caddy terminates TLS, and the server container drops to a non-root user. The Linux agent packaging issue is tracked separately in the reported local-storage surface.",
+      "receiptRefs": [],
+      "riskArea": "deployment security"
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "surface_ci_docs_specs",
+      "label": "CI security workflow, documentation, specifications, and AGENTS guidance",
+      "notes": "Reviewed security workflow, usage/architecture docs, spec files, and the untracked AGENTS.md guidance file; no separate reportable issue was identified.",
+      "receiptRefs": [],
+      "riskArea": "supply-chain/documentation drift"
+    }
+  ]
+}

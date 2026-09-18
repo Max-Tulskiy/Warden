@@ -1,0 +1,217 @@
+{
+  "documentType": "codex-security.findings",
+  "findings": [
+    {
+      "attackPath": {
+        "dataflow": {
+          "evidenceRefs": [
+            "config-sensitive-files",
+            "state-write",
+            "buffer-create",
+            "agent-key-use"
+          ],
+          "outcome": "read sensitive endpoint telemetry and impersonate the enrolled agent for its own server endpoints",
+          "sink": "persistent agent credential and local SQLite telemetry buffer",
+          "source": "local filesystem access by an unprivileged workstation user",
+          "summary": "Linux package paths -> systemd state directory -> `AgentState.save()` / `Buffer()` -> world-readable files -> `require_agent()` authentication"
+        },
+        "evidenceRefs": [
+          "linux-packaged-paths",
+          "state-write",
+          "buffer-create",
+          "agent-key-use"
+        ],
+        "impact": {
+          "level": "medium",
+          "why": "The issue compromises one endpoint agent identity and sensitive local monitoring data, but it does not grant operator panel access or affect other agents because server-side authentication checks the URL `agent_id`."
+        },
+        "likelihood": {
+          "level": "medium",
+          "why": "Default Linux filesystem behavior commonly uses umask `022`; no code or packaging control forces owner-only modes before the files are created."
+        },
+        "limitations": [
+          "The attack is local to the monitored workstation."
+        ],
+        "reachability": {
+          "attacker": "local unprivileged workstation user",
+          "entrypoint": "/var/lib/warden-agent/state.json and /var/lib/warden-agent/buffer.db",
+          "outcome": "agent credential disclosure, telemetry disclosure, and falsified agent reports for that workstation",
+          "summary": "The attacker needs shell or filesystem access as any local user on the monitored Linux host while default package/service settings are in use."
+        },
+        "summary": "A local unprivileged user on a monitored Linux workstation reads `/var/lib/warden-agent/state.json` and `/var/lib/warden-agent/buffer.db`, extracts the per-agent key and telemetry, then uses the key as `X-Agent-Key` to act as that workstation."
+      },
+      "codeEvidence": [
+        {
+          "code": "  - src: ../../agent/config.example.toml\n    dst: /etc/warden-agent/config.toml\n    type: config|noreplace\n\n  - dst: /var/lib/warden-agent\n    type: dir",
+          "endLine": 36,
+          "explanation": "The Linux package creates `/var/lib/warden-agent` but does not set owner-only directory permissions, so the runtime files created there inherit default packaging/system umask behavior.",
+          "id": "linux-packaged-paths",
+          "label": "Linux package deploys config and state directory without a restrictive mode",
+          "language": "yaml",
+          "path": "packaging/nfpm/nfpm.yaml",
+          "role": "entrypoint",
+          "startLine": 31
+        },
+        {
+          "code": "[Service]\nType=simple\nExecStart=/usr/bin/warden-agent --config /etc/warden-agent/config.toml\nRestart=on-failure\nRestartSec=5\nStateDirectory=warden-agent\nWorkingDirectory=/var/lib/warden-agent",
+          "endLine": 20,
+          "explanation": "The service stores agent runtime state under `/var/lib/warden-agent` and does not set `StateDirectoryMode=0700` or another equivalent owner-only control.",
+          "id": "systemd-state-dir",
+          "label": "systemd unit uses the shared state directory as the working directory",
+          "language": "ini",
+          "path": "packaging/systemd/warden-agent.service",
+          "role": "propagation",
+          "startLine": 14
+        },
+        {
+          "code": "buffer_path = \"/var/lib/warden-agent/buffer.db\"\nstate_path = \"/var/lib/warden-agent/state.json\"",
+          "endLine": 25,
+          "explanation": "`state_path` holds the permanent per-agent credential and `buffer_path` holds collected endpoint events; both are placed in the directory whose permissions are not hardened by packaging.",
+          "id": "config-sensitive-files",
+          "label": "Default Linux config places both sensitive files in the state directory",
+          "language": "toml",
+          "path": "agent/config.example.toml",
+          "role": "propagation",
+          "startLine": 24
+        },
+        {
+          "code": "    def save(self, path: Path) -> None:\n        path.write_text(json.dumps(self.model_dump()), encoding=\"utf-8\")",
+          "endLine": 28,
+          "explanation": "`Path.write_text()` creates the state file using the process umask. With a normal `022` umask, the file is mode `0644`, exposing `agent_key` to local users who can traverse the state directory.",
+          "id": "state-write",
+          "label": "Agent state is written without chmod or atomic owner-only creation",
+          "language": "python",
+          "path": "agent/src/warden_agent/state.py",
+          "role": "sink",
+          "startLine": 27
+        },
+        {
+          "code": "    def __init__(self, path: Path) -> None:\n        self._lock = threading.Lock()\n        self._connection = sqlite3.connect(str(path), check_same_thread=False)\n        with self._lock:\n            self._connection.executescript(_SCHEMA)\n            self._connection.commit()",
+          "endLine": 52,
+          "explanation": "`sqlite3.connect()` creates `buffer.db` using the process umask. The buffer stores web, process, printing, removable media, and inventory events before report upload.",
+          "id": "buffer-create",
+          "label": "SQLite buffer is created without restrictive mode",
+          "language": "python",
+          "path": "agent/src/warden_agent/buffer/store.py",
+          "role": "sink",
+          "startLine": 47
+        },
+        {
+          "code": "def require_agent(\n    agent_id: uuid.UUID = Path(...),\n    x_agent_key: str | None = Header(default=None),\n    db: Session = Depends(get_db),\n) -> Agent:\n    unauthorized = HTTPException(\n        status.HTTP_401_UNAUTHORIZED, detail=\"Invalid agent credentials\"\n    )\n    if not x_agent_key:\n        raise unauthorized\n    agent = db.get(Agent, agent_id)\n    if (\n        agent is None\n        or agent.status != AgentStatus.ACTIVE\n        or not verify_secret_token(x_agent_key, agent.agent_key_hash)\n    ):\n        raise unauthorized\n    return agent",
+          "endLine": 41,
+          "explanation": "Once a local user reads `agent_key` from `state.json`, that value is sufficient to authenticate as the same active agent for task polling, report submission, and inventory upload endpoints.",
+          "id": "agent-key-use",
+          "label": "The stolen key is the credential accepted by agent endpoints",
+          "language": "python",
+          "path": "server/src/warden_server/api/deps.py",
+          "role": "outcome",
+          "startLine": 18
+        }
+      ],
+      "confidence": {
+        "level": "high",
+        "rationale": "Static source review shows no restrictive mode is applied to the Linux state directory, state file, or SQLite buffer; a local reproduction under umask 022 created both files as 0644."
+      },
+      "extensions": {},
+      "findingId": "csf_946a4d1a16a4a7564de50a11",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:9606f7f912109ccb41f0896c48a4fd06c31cc799eaf785958b7142c274cadb22"
+      },
+      "identity": {
+        "anchor": "linux-agent-state-and-buffer-default-files"
+      },
+      "locations": [
+        {
+          "endLine": 28,
+          "path": "agent/src/warden_agent/state.py",
+          "role": "sink",
+          "startLine": 27
+        },
+        {
+          "endLine": 52,
+          "path": "agent/src/warden_agent/buffer/store.py",
+          "role": "sink",
+          "startLine": 47
+        },
+        {
+          "endLine": 20,
+          "path": "packaging/systemd/warden-agent.service",
+          "role": "deployment",
+          "startLine": 14
+        },
+        {
+          "endLine": 36,
+          "path": "packaging/nfpm/nfpm.yaml",
+          "role": "deployment",
+          "startLine": 31
+        }
+      ],
+      "occurrenceId": "occ_ec4567521b67f13db2d5cbb5",
+      "preventiveControls": [
+        "Centralize sensitive-file creation in one helper that uses `os.open(..., 0o600)` or immediately applies `chmod(0o600)` before writing secrets.",
+        "Set `StateDirectoryMode=0700` in the systemd unit and explicit `file_info.mode`/ownership for package-created config and state paths.",
+        "Document that local agent state contains a bearer credential and must be protected like a secret."
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Create the Linux state directory with owner-only permissions and create/chmod `state.json` and `buffer.db` as `0600` before storing credentials or telemetry.",
+      "remediationTests": [
+        "Assert that `AgentState.save()` creates a new state file with mode `0600` even when the process umask is `022`.",
+        "Assert that `Buffer(path)` creates a new SQLite database with mode `0600` even when the process umask is `022`.",
+        "Add packaging validation that the Linux package or systemd unit sets `/var/lib/warden-agent` to an owner-only mode such as `0700`."
+      ],
+      "rootCause": {
+        "evidenceRefs": [
+          "linux-packaged-paths",
+          "systemd-state-dir",
+          "config-sensitive-files",
+          "state-write",
+          "buffer-create",
+          "agent-key-use"
+        ],
+        "summary": "The violated invariant is that local agent credentials and telemetry must be readable only by the service account/root. Packaging places both runtime files under `/var/lib/warden-agent` without an owner-only directory mode, and the Python code creates `state.json` and `buffer.db` through APIs that inherit the process umask instead of explicitly applying `0600` file permissions."
+      },
+      "ruleId": "filesystem.weak-agent-secret-permissions",
+      "severity": {
+        "changeConditions": "Severity would increase if the agent key could authorize cross-agent access; the server currently scopes the key to the URL agent_id. Severity would decrease if deployment scripts always created a 0700 state directory and 0600 files before first start.",
+        "level": "medium",
+        "rationale": "The attack requires local low-privilege access to the workstation, but it discloses sensitive telemetry and enables impersonation of that station to poll tasks and submit falsified reports.",
+        "score": 6.4,
+        "scoringSystem": "CVSS:3.1"
+      },
+      "summary": "A local workstation user can read the Linux agent state file and SQLite buffer when the service runs with the packaged defaults. The state file contains the permanent per-agent key used as `X-Agent-Key`, and the buffer contains collected endpoint telemetry.",
+      "taxonomy": {
+        "category": "insecure-file-permissions",
+        "cwe": [
+          "CWE-276",
+          "CWE-732"
+        ]
+      },
+      "title": "Local users can read the Linux agent key and monitoring buffer",
+      "validation": {
+        "assertions": [
+          "`state.json` contains `agent_id` and `agent_key` after enrollment.",
+          "`buffer.db` stores collected local event payloads until retention pruning.",
+          "The server accepts the plaintext `agent_key` through `X-Agent-Key` for that same `agent_id`."
+        ],
+        "evidenceRefs": [
+          "linux-packaged-paths",
+          "systemd-state-dir",
+          "config-sensitive-files",
+          "state-write",
+          "buffer-create"
+        ],
+        "limitations": [
+          "A full Linux package install under systemd was not executed during this scan.",
+          "The server correctly scopes the stolen key to its own agent_id, so this is endpoint impersonation rather than cross-agent authorization bypass."
+        ],
+        "method": "static source trace plus local mode reproduction",
+        "summary": "The source trace follows packaged Linux paths to the state and buffer creation points. Running the real `AgentState.save()` and `Buffer()` creation code through `agent/.venv` with umask `022` produced `state.json` and `buffer.db` as `0644`, confirming local readability under default conditions."
+      }
+    }
+  ],
+  "scanId": "scan_warden_20260916_001",
+  "schemaVersion": "1.0"
+}

@@ -1,0 +1,544 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "29d9d1c1-fdf1-485f-92e4-6717f5d82088"
+      },
+      "properties": {
+        "codexSecuritySchemaVersion": "1.0",
+        "codexSecurityTargetKind": "git_worktree"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "root_control"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/api/agents.py"
+                },
+                "region": {
+                  "endLine": 125,
+                  "startLine": 117
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "user_input"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/schemas/event.py"
+                },
+                "region": {
+                  "endLine": 22,
+                  "startLine": 12
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/services/tasks.py"
+                },
+                "region": {
+                  "endLine": 76,
+                  "startLine": 63
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "outcome"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/api/reports.py"
+                },
+                "region": {
+                  "endLine": 47,
+                  "startLine": 36
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Agent report ingestion accepts events outside the requested window\n\nThe report endpoint verifies task ownership but stores every submitted event timestamp without checking that it falls inside the task's requested window.\n\nSeverity: medium\n\nCategory: Improper input validation\n\nWeaknesses: CWE-20\n\nRemediation:\nOn report submission, require `task.kind == WINDOW_REQUEST` and `task.status == DISPATCHED`, then reject or drop every event where `event.occurred_at < task.window_start` or `event.occurred_at >= task.window_end`.\n\nRemediation tests:\n- Assert that an event before `task.window_start` is rejected and no event row is stored.\n- Assert that an event at or after `task.window_end` is rejected and no event row is stored.\n- Assert that reports cannot complete pending or already completed tasks outside the expected lifecycle.\n\nPreventive controls:\n- Mirror every privacy/data-boundary invariant at the server ingestion boundary, even when the official agent already enforces it locally."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:8167ede46ae9df4c5a7f9029f449cf728e6383370366ef25e56437002312fa7d"
+          },
+          "properties": {
+            "category": "improper-input-validation",
+            "confidence": "high",
+            "findingId": "csf_3f22aaa4010c8ccf0ef7ff0f",
+            "occurrenceId": "occ_028fdd560e9a9b2d1d3f7975",
+            "severity": "medium"
+          },
+          "ruleId": "report-window-validation.missing",
+          "ruleIndex": 3
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "root_control"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/api/auth.py"
+                },
+                "region": {
+                  "endLine": 34,
+                  "startLine": 16
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/security.py"
+                },
+                "region": {
+                  "endLine": 38,
+                  "startLine": 27
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "expected_control"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Caddyfile"
+                },
+                "region": {
+                  "endLine": 15,
+                  "startLine": 9
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Operator login lacks throttling and failed-attempt audit\n\nThe operator login endpoint performs Argon2 password verification and returns 401 for invalid credentials without rate limiting, lockout, or an audit record for failed attempts.\n\nSeverity: medium\n\nCategory: Authentication hardening\n\nWeaknesses: CWE-307, CWE-778\n\nRemediation:\nAdd per-IP and per-username rate limiting/backoff, cap username/password lengths, audit failed login attempts without exposing credential details, and alert on repeated failures. Prefer enforcing limits both at Caddy/proxy and inside the FastAPI auth path.\n\nRemediation tests:\n- Assert failed login attempts create audit entries with action such as `operator.login_failed`.\n- Assert repeated failed attempts for the same username or IP are throttled.\n- Assert very large username/password bodies are rejected before expensive verification.\n\nPreventive controls:\n- Make authentication failures first-class audit events and put rate limits in front of every password-verification endpoint."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:91a79866e0f580ccf30fb74ecda5b45326b470964ae7bf2d964661ff463e4820"
+          },
+          "properties": {
+            "category": "authentication-hardening",
+            "confidence": "high",
+            "findingId": "csf_90d36bf2b9a619b64bca3b53",
+            "occurrenceId": "occ_27e6506f48a14e6308e911dd",
+            "severity": "medium"
+          },
+          "ruleId": "auth.login-throttling-audit",
+          "ruleIndex": 0
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "user_input"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/schemas/event.py"
+                },
+                "region": {
+                  "endLine": 22,
+                  "startLine": 12
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "user_input"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/schemas/inventory.py"
+                },
+                "region": {
+                  "endLine": 19,
+                  "startLine": 10
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/services/tasks.py"
+                },
+                "region": {
+                  "endLine": 74,
+                  "startLine": 63
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/services/inventory.py"
+                },
+                "region": {
+                  "endLine": 28,
+                  "startLine": 21
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "outcome"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/api/reports.py"
+                },
+                "region": {
+                  "endLine": 67,
+                  "startLine": 38
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Agent upload APIs accept unbounded event and inventory payloads\n\nAuthenticated agent upload schemas allow unbounded event arrays and arbitrary JSON objects, and server handlers materialize/store them without API, database, or read-side pagination limits.\n\nSeverity: medium\n\nCategory: Resource exhaustion\n\nWeaknesses: CWE-770\n\nRemediation:\nSet proxy and FastAPI request body limits; add Pydantic `max_length` and JSON field constraints for report and inventory payloads; enforce per-agent upload quotas; store large batches in bounded chunks; and paginate daily event and inventory-change read endpoints.\n\nRemediation tests:\n- Assert report uploads above the configured event count limit are rejected.\n- Assert inventory payloads above configured key/byte limits are rejected.\n- Assert report and inventory-change read endpoints paginate and cap response size.\n\nPreventive controls:\n- Treat every authenticated machine identity as potentially compromised and enforce server-owned resource quotas."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:64bdab419c1a51db53a0c13a765dfaaff4c58fc7317a9978492f256c98c4584e"
+          },
+          "properties": {
+            "category": "resource-exhaustion",
+            "confidence": "high",
+            "findingId": "csf_e09896a15978bcd972ff9421",
+            "occurrenceId": "occ_616c297d94ecaccf01047f06",
+            "severity": "medium"
+          },
+          "ruleId": "resource-limits.agent-upload",
+          "ruleIndex": 4
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "root_control"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "packaging/nfpm/nfpm.yaml"
+                },
+                "region": {
+                  "endLine": 38,
+                  "startLine": 31
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "user_input"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agent/config.example.toml"
+                },
+                "region": {
+                  "endLine": 13,
+                  "startLine": 9
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "entrypoint"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/ru/usage.md"
+                },
+                "region": {
+                  "endLine": 44,
+                  "startLine": 39
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "root_control"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "packaging/windows/Product.wxs"
+                },
+                "region": {
+                  "endLine": 68,
+                  "startLine": 53
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/api/agents.py"
+                },
+                "region": {
+                  "endLine": 88,
+                  "startLine": 56
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Packaged agent config can expose first-run enrollment tokens\n\nSetup instructions place a real enrollment token in the agent config before first start, but the Linux and Windows package definitions do not set owner-only permissions on that config file.\n\nSeverity: medium\n\nCategory: Insecure file permissions\n\nWeaknesses: CWE-732\n\nRemediation:\nInstall agent config files with owner-only permissions: `0600` or root-only ownership on Linux, and Administrators/SYSTEM-only ACLs on Windows. Remove or blank `enrollment_token` automatically after successful enrollment, or pass it through a protected one-shot secret file/installer property that is deleted immediately.\n\nRemediation tests:\n- Assert built Linux packages set `/etc/warden-agent/config.toml` to an owner-only mode.\n- Add a Windows installer validation or documentation check for restrictive ACLs on `%ProgramData%\\Warden\\agent\\config.toml`.\n- Assert successful enrollment removes or clears `enrollment_token` when the agent owns the config path.\n\nPreventive controls:\n- Classify setup-time config files containing bootstrap credentials as secrets until the credential is removed."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:ca1331896879e95aa2c820e505bf4b1ce6f9184a7820cf9030dd7ecd19063a31"
+          },
+          "properties": {
+            "category": "insecure-file-permissions",
+            "confidence": "medium",
+            "findingId": "csf_b131c7572b42317cba28d677",
+            "occurrenceId": "occ_bb2cc1d17ae56eda6f0cfee1",
+            "severity": "medium"
+          },
+          "ruleId": "insecure-config.enrollment-token-file",
+          "ruleIndex": 1
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "root_control"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/api/agents.py"
+                },
+                "region": {
+                  "endLine": 78,
+                  "startLine": 59
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "expected_control"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/models/enrollment.py"
+                },
+                "region": {
+                  "endLine": 20,
+                  "startLine": 15
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "test_gap"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/tests/integration/test_enrollment/test_enroll_flow.py"
+                },
+                "region": {
+                  "endLine": 41,
+                  "startLine": 29
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "evidence:token-read-check"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/api/agents.py"
+                },
+                "region": {
+                  "endLine": 66,
+                  "startLine": 59
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "evidence:agent-before-used-at"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "server/src/warden_server/api/agents.py"
+                },
+                "region": {
+                  "endLine": 79,
+                  "startLine": 68
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Concurrent enrollment can reuse a one-time token\n\nThe enrollment endpoint checks `used_at` and marks the token used in separate ORM steps, so two concurrent requests with the same valid token can both pass the one-time-token check before either transaction commits.\n\nSeverity: medium\n\nCategory: Race condition\n\nWeaknesses: CWE-362\n\nRemediation:\nClaim enrollment tokens atomically, for example with `UPDATE enrollment_tokens SET used_at = :now WHERE token_hash = :hash AND used_at IS NULL AND expires_at >= :now RETURNING id`, then create the agent only if exactly one row was claimed. Alternatively, select the row `FOR UPDATE` in PostgreSQL and re-check before creating the agent.\n\nRemediation tests:\n- Add a PostgreSQL integration test that sends concurrent enrollment requests with the same token and asserts exactly one succeeds.\n- Assert that sequential reuse still returns 400 after the atomic claim change.\n\nPreventive controls:\n- Keep one-time credential state transitions in database-atomic operations rather than application read-check-write sequences."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:3fe99de10cdfdc87d692a4e1c6281c4786a8ddf98a85dd56aefc18833cfb8670"
+          },
+          "properties": {
+            "category": "race-condition",
+            "confidence": "high",
+            "findingId": "csf_3aa760497e45b69f4ac9bce2",
+            "occurrenceId": "occ_f62fd76659ce64d038a91ab6",
+            "severity": "medium"
+          },
+          "ruleId": "race.enrollment-token-reuse",
+          "ruleIndex": 2
+        }
+      ],
+      "tool": {
+        "driver": {
+          "name": "Codex Security",
+          "rules": [
+            {
+              "fullDescription": {
+                "text": "Auth: Login throttling audit. Categories: Authentication hardening. Weaknesses: CWE-307, CWE-778."
+              },
+              "help": {
+                "markdown": "Auth: Login throttling audit. Categories: Authentication hardening. Weaknesses: CWE-307, CWE-778.\n\n## Remediation\n\nAdd per-IP and per-username rate limiting/backoff, cap username/password lengths, audit failed login attempts without exposing credential details, and alert on repeated failures. Prefer enforcing limits both at Caddy/proxy and inside the FastAPI auth path.",
+                "text": "Auth: Login throttling audit. Categories: Authentication hardening. Weaknesses: CWE-307, CWE-778.\n\nRemediation:\n\nAdd per-IP and per-username rate limiting/backoff, cap username/password lengths, audit failed login attempts without exposing credential details, and alert on repeated failures. Prefer enforcing limits both at Caddy/proxy and inside the FastAPI auth path."
+              },
+              "id": "auth.login-throttling-audit",
+              "name": "Auth: Login throttling audit",
+              "properties": {
+                "security-severity": "5.0",
+                "tags": [
+                  "authentication-hardening",
+                  "external/cwe/cwe-307",
+                  "external/cwe/cwe-778",
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "Auth: Login throttling audit"
+              }
+            },
+            {
+              "fullDescription": {
+                "text": "Insecure config: Enrollment token file. Categories: Insecure file permissions. Weaknesses: CWE-732."
+              },
+              "help": {
+                "markdown": "Insecure config: Enrollment token file. Categories: Insecure file permissions. Weaknesses: CWE-732.\n\n## Remediation\n\nInstall agent config files with owner-only permissions: `0600` or root-only ownership on Linux, and Administrators/SYSTEM-only ACLs on Windows. Remove or blank `enrollment_token` automatically after successful enrollment, or pass it through a protected one-shot secret file/installer property that is deleted immediately.",
+                "text": "Insecure config: Enrollment token file. Categories: Insecure file permissions. Weaknesses: CWE-732.\n\nRemediation:\n\nInstall agent config files with owner-only permissions: `0600` or root-only ownership on Linux, and Administrators/SYSTEM-only ACLs on Windows. Remove or blank `enrollment_token` automatically after successful enrollment, or pass it through a protected one-shot secret file/installer property that is deleted immediately."
+              },
+              "id": "insecure-config.enrollment-token-file",
+              "name": "Insecure config: Enrollment token file",
+              "properties": {
+                "security-severity": "5.0",
+                "tags": [
+                  "external/cwe/cwe-732",
+                  "insecure-file-permissions",
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "Insecure config: Enrollment token file"
+              }
+            },
+            {
+              "fullDescription": {
+                "text": "Race: Enrollment token reuse. Categories: Race condition. Weaknesses: CWE-362."
+              },
+              "help": {
+                "markdown": "Race: Enrollment token reuse. Categories: Race condition. Weaknesses: CWE-362.\n\n## Remediation\n\nClaim enrollment tokens atomically, for example with `UPDATE enrollment_tokens SET used_at = :now WHERE token_hash = :hash AND used_at IS NULL AND expires_at >= :now RETURNING id`, then create the agent only if exactly one row was claimed. Alternatively, select the row `FOR UPDATE` in PostgreSQL and re-check before creating the agent.",
+                "text": "Race: Enrollment token reuse. Categories: Race condition. Weaknesses: CWE-362.\n\nRemediation:\n\nClaim enrollment tokens atomically, for example with `UPDATE enrollment_tokens SET used_at = :now WHERE token_hash = :hash AND used_at IS NULL AND expires_at >= :now RETURNING id`, then create the agent only if exactly one row was claimed. Alternatively, select the row `FOR UPDATE` in PostgreSQL and re-check before creating the agent."
+              },
+              "id": "race.enrollment-token-reuse",
+              "name": "Race: Enrollment token reuse",
+              "properties": {
+                "security-severity": "5.0",
+                "tags": [
+                  "external/cwe/cwe-362",
+                  "race-condition",
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "Race: Enrollment token reuse"
+              }
+            },
+            {
+              "fullDescription": {
+                "text": "Report window validation: Missing. Categories: Improper input validation. Weaknesses: CWE-20."
+              },
+              "help": {
+                "markdown": "Report window validation: Missing. Categories: Improper input validation. Weaknesses: CWE-20.\n\n## Remediation\n\nOn report submission, require `task.kind == WINDOW_REQUEST` and `task.status == DISPATCHED`, then reject or drop every event where `event.occurred_at < task.window_start` or `event.occurred_at >= task.window_end`.",
+                "text": "Report window validation: Missing. Categories: Improper input validation. Weaknesses: CWE-20.\n\nRemediation:\n\nOn report submission, require `task.kind == WINDOW_REQUEST` and `task.status == DISPATCHED`, then reject or drop every event where `event.occurred_at < task.window_start` or `event.occurred_at >= task.window_end`."
+              },
+              "id": "report-window-validation.missing",
+              "name": "Report window validation: Missing",
+              "properties": {
+                "security-severity": "5.0",
+                "tags": [
+                  "external/cwe/cwe-020",
+                  "improper-input-validation",
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "Report window validation: Missing"
+              }
+            },
+            {
+              "fullDescription": {
+                "text": "Resource limits: Agent upload. Categories: Resource exhaustion. Weaknesses: CWE-770."
+              },
+              "help": {
+                "markdown": "Resource limits: Agent upload. Categories: Resource exhaustion. Weaknesses: CWE-770.\n\n## Remediation\n\nSet proxy and FastAPI request body limits; add Pydantic `max_length` and JSON field constraints for report and inventory payloads; enforce per-agent upload quotas; store large batches in bounded chunks; and paginate daily event and inventory-change read endpoints.",
+                "text": "Resource limits: Agent upload. Categories: Resource exhaustion. Weaknesses: CWE-770.\n\nRemediation:\n\nSet proxy and FastAPI request body limits; add Pydantic `max_length` and JSON field constraints for report and inventory payloads; enforce per-agent upload quotas; store large batches in bounded chunks; and paginate daily event and inventory-change read endpoints."
+              },
+              "id": "resource-limits.agent-upload",
+              "name": "Resource limits: Agent upload",
+              "properties": {
+                "security-severity": "5.0",
+                "tags": [
+                  "external/cwe/cwe-770",
+                  "resource-exhaustion",
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "Resource limits: Agent upload"
+              }
+            }
+          ],
+          "version": "0.1.24"
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

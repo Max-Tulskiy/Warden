@@ -1,0 +1,689 @@
+{
+  "documentType": "codex-security.findings",
+  "findings": [
+    {
+      "attackPath": {
+        "dataflow": {
+          "outcome": "unauthorized enrolled agent identity",
+          "sink": "new `agents` row and returned `agent_key`",
+          "source": "valid enrollment token held by an attacker",
+          "summary": "enrollment token -> token row lookup -> application `used_at` check -> `Agent(...)` creation -> permanent agent key"
+        },
+        "reachability": {
+          "attacker": "holder of a valid enrollment token",
+          "entrypoint": "POST `/api/v1/enroll`",
+          "outcome": "multiple permanent agent credentials or denial of legitimate enrollment",
+          "summary": "The `/api/v1/enroll` endpoint is intentionally unauthenticated except for possession of the enrollment token."
+        },
+        "summary": "An insider who sees a still-valid enrollment token sends concurrent enrollment requests; more than one request can create an agent before the token is marked used."
+      },
+      "codeEvidence": [
+        {
+          "code": "token_hash = hash_secret_token(payload.token)\ntoken = db.execute(\n    select(EnrollmentToken).where(EnrollmentToken.token_hash == token_hash)\n).scalar_one_or_none()\n\nnow = datetime.now(UTC)\nif token is None or token.used_at is not None or token.expires_at < now:\n    raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=\"Invalid or used token\")",
+          "endLine": 66,
+          "explanation": "A concurrent request can read the same row while `used_at` is still null because this is a plain select and application-level check.",
+          "id": "token-read-check",
+          "label": "Token is read and checked before it is marked used",
+          "language": "python",
+          "path": "server/src/warden_server/api/agents.py",
+          "role": "root_control",
+          "startLine": 59
+        },
+        {
+          "code": "agent_key = generate_secret_token()\nagent = Agent(\n    hostname=payload.hostname,\n    os=payload.os,\n    agent_key_hash=hash_secret_token(agent_key),\n    status=AgentStatus.ACTIVE,\n    enrolled_at=now,\n    last_seen_at=now,\n)\ndb.add(agent)\ntoken.used_at = now",
+          "endLine": 79,
+          "explanation": "The endpoint prepares a new permanent agent key and agent row before marking the token as used, without an atomic claim operation.",
+          "id": "agent-before-used-at",
+          "label": "Agent creation happens before token consumption is written",
+          "language": "python",
+          "path": "server/src/warden_server/api/agents.py",
+          "role": "sink",
+          "startLine": 68
+        },
+        {
+          "code": "id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)\ntoken_hash: Mapped[str] = mapped_column(String(64), unique=True)\ncreated_by: Mapped[str] = mapped_column(String(255))\ncreated_at: Mapped[datetime] = mapped_column(UTCDateTime())\nexpires_at: Mapped[datetime] = mapped_column(UTCDateTime())\nused_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)",
+          "endLine": 20,
+          "explanation": "The table records `used_at`, but no database-level relationship or conditional update enforces that only one transaction can consume the token.",
+          "id": "token-schema",
+          "label": "Schema lacks a one-agent consumption guard",
+          "language": "python",
+          "path": "server/src/warden_server/models/enrollment.py",
+          "role": "expected_control",
+          "startLine": 15
+        }
+      ],
+      "confidence": {
+        "level": "high",
+        "rationale": "The source trace shows a non-atomic check-then-use sequence and no row lock, conditional update, or schema constraint that binds a token to exactly one agent creation."
+      },
+      "findingId": "csf_3aa760497e45b69f4ac9bce2",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:3fe99de10cdfdc87d692a4e1c6281c4786a8ddf98a85dd56aefc18833cfb8670"
+      },
+      "identity": {
+        "anchor": "concurrent-enrollment-can-reuse-a-one-time-token"
+      },
+      "locations": [
+        {
+          "endLine": 78,
+          "path": "server/src/warden_server/api/agents.py",
+          "role": "root_control",
+          "startLine": 59
+        },
+        {
+          "endLine": 20,
+          "path": "server/src/warden_server/models/enrollment.py",
+          "role": "expected_control",
+          "startLine": 15
+        },
+        {
+          "endLine": 41,
+          "path": "server/tests/integration/test_enrollment/test_enroll_flow.py",
+          "role": "test_gap",
+          "startLine": 29
+        }
+      ],
+      "occurrenceId": "occ_f62fd76659ce64d038a91ab6",
+      "preventiveControls": [
+        "Keep one-time credential state transitions in database-atomic operations rather than application read-check-write sequences."
+      ],
+      "provenance": {
+        "candidateId": "candidate-enrollment-token-race",
+        "source": "parent_validation"
+      },
+      "remediation": "Claim enrollment tokens atomically, for example with `UPDATE enrollment_tokens SET used_at = :now WHERE token_hash = :hash AND used_at IS NULL AND expires_at >= :now RETURNING id`, then create the agent only if exactly one row was claimed. Alternatively, select the row `FOR UPDATE` in PostgreSQL and re-check before creating the agent.",
+      "remediationTests": [
+        "Add a PostgreSQL integration test that sends concurrent enrollment requests with the same token and asserts exactly one succeeds.",
+        "Assert that sequential reuse still returns 400 after the atomic claim change."
+      ],
+      "rootCause": {
+        "evidenceRefs": [
+          "token-read-check",
+          "agent-before-used-at",
+          "token-schema"
+        ],
+        "summary": "The one-time credential invariant is implemented as a read-check-write sequence in application code instead of an atomic database claim."
+      },
+      "ruleId": "race.enrollment-token-reuse",
+      "severity": {
+        "level": "medium",
+        "rationale": "A valid enrollment token is required, but a successful race can mint unauthorized permanent agent keys and undermine station attribution."
+      },
+      "summary": "The enrollment endpoint checks `used_at` and marks the token used in separate ORM steps, so two concurrent requests with the same valid token can both pass the one-time-token check before either transaction commits.",
+      "taxonomy": {
+        "category": "race-condition",
+        "cwe": [
+          "CWE-362"
+        ]
+      },
+      "title": "Concurrent enrollment can reuse a one-time token",
+      "validation": {
+        "evidenceRefs": [
+          "token-read-check",
+          "agent-before-used-at",
+          "token-schema"
+        ],
+        "limitations": [
+          "No live concurrent PostgreSQL reproduction was run in this scan."
+        ],
+        "method": "static source trace",
+        "summary": "The endpoint has no `FOR UPDATE`, no conditional `UPDATE ... WHERE used_at IS NULL`, and no uniqueness constraint tying token consumption to agent creation. Existing tests cover only sequential reuse rejection."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "outcome": "forged or excessive telemetry appears outside the approved request window",
+          "sink": "central `events` table and operator daily report",
+          "source": "agent-controlled report body",
+          "summary": "`events[].occurred_at` -> `submit_report()` -> `complete_task()` -> `events.occurred_at` -> daily report query"
+        },
+        "reachability": {
+          "attacker": "compromised or modified enrolled agent",
+          "entrypoint": "POST `/api/v1/agents/{agent_id}/reports`",
+          "outcome": "server-side report integrity violation",
+          "summary": "Requires a valid `X-Agent-Key` for that `agent_id`; the endpoint is reachable by the enrolled agent during normal operation."
+        },
+        "summary": "A compromised enrolled agent waits for any dispatched task, submits events with timestamps outside the task window, and the server stores them for operator reports."
+      },
+      "codeEvidence": [
+        {
+          "code": "class EventIn(BaseModel):\n    category: EventCategory\n    occurred_at: datetime\n    payload: dict[str, Any] = Field(default_factory=dict)\n\n\nclass ReportIn(BaseModel):\n    task_id: uuid.UUID\n    events: list[EventIn] = Field(default_factory=list)",
+          "endLine": 22,
+          "explanation": "The authenticated agent controls each `occurred_at` value in the report body; the schema has no task-window-aware validator.",
+          "id": "report-event-input",
+          "label": "Report payload accepts arbitrary event timestamps",
+          "language": "python",
+          "path": "server/src/warden_server/schemas/event.py",
+          "role": "user_input",
+          "startLine": 12
+        },
+        {
+          "code": "task = db.get(Task, payload.task_id)\nif task is None or task.agent_id != agent.id:\n    raise HTTPException(status.HTTP_404_NOT_FOUND, detail=\"Unknown task\")\nif task.status == TaskStatus.COMPLETED:\n    raise HTTPException(\n        status.HTTP_409_CONFLICT, detail=\"Task has already been completed\"\n    )\n\ntasks_service.complete_task(db, task=task, events=payload.events)",
+          "endLine": 125,
+          "explanation": "The endpoint confirms the task belongs to the agent and is not already complete, then forwards all submitted events without comparing timestamps with `task.window_start` and `task.window_end`.",
+          "id": "report-missing-window-check",
+          "label": "Report endpoint checks ownership but not event range",
+          "language": "python",
+          "path": "server/src/warden_server/api/agents.py",
+          "role": "root_control",
+          "startLine": 117
+        },
+        {
+          "code": "stored = [\n    Event(\n        agent_id=task.agent_id,\n        task_id=task.id,\n        category=event.category,\n        occurred_at=event.occurred_at,\n        payload=event.payload,\n    )\n    for event in events\n]\ndb.add_all(stored)\ntask.status = TaskStatus.COMPLETED",
+          "endLine": 76,
+          "explanation": "`complete_task()` persists the attacker-supplied timestamp exactly as received.",
+          "id": "event-timestamp-stored",
+          "label": "Stored event uses the submitted timestamp",
+          "language": "python",
+          "path": "server/src/warden_server/services/tasks.py",
+          "role": "sink",
+          "startLine": 63
+        }
+      ],
+      "confidence": {
+        "level": "high",
+        "rationale": "Static review shows no server-side timestamp comparison, and an in-memory FastAPI reproduction accepted an event from the previous day for a one-hour task."
+      },
+      "findingId": "csf_3f22aaa4010c8ccf0ef7ff0f",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:8167ede46ae9df4c5a7f9029f449cf728e6383370366ef25e56437002312fa7d"
+      },
+      "identity": {
+        "anchor": "agent-report-ingestion-accepts-events-outside-the-requested-window"
+      },
+      "locations": [
+        {
+          "endLine": 22,
+          "path": "server/src/warden_server/schemas/event.py",
+          "role": "user_input",
+          "startLine": 12
+        },
+        {
+          "endLine": 125,
+          "path": "server/src/warden_server/api/agents.py",
+          "role": "root_control",
+          "startLine": 117
+        },
+        {
+          "endLine": 76,
+          "path": "server/src/warden_server/services/tasks.py",
+          "role": "sink",
+          "startLine": 63
+        },
+        {
+          "endLine": 47,
+          "path": "server/src/warden_server/api/reports.py",
+          "role": "outcome",
+          "startLine": 36
+        }
+      ],
+      "occurrenceId": "occ_028fdd560e9a9b2d1d3f7975",
+      "preventiveControls": [
+        "Mirror every privacy/data-boundary invariant at the server ingestion boundary, even when the official agent already enforces it locally."
+      ],
+      "provenance": {
+        "candidateId": "candidate-out-of-window-report",
+        "source": "parent_validation"
+      },
+      "remediation": "On report submission, require `task.kind == WINDOW_REQUEST` and `task.status == DISPATCHED`, then reject or drop every event where `event.occurred_at < task.window_start` or `event.occurred_at >= task.window_end`.",
+      "remediationTests": [
+        "Assert that an event before `task.window_start` is rejected and no event row is stored.",
+        "Assert that an event at or after `task.window_end` is rejected and no event row is stored.",
+        "Assert that reports cannot complete pending or already completed tasks outside the expected lifecycle."
+      ],
+      "rootCause": {
+        "evidenceRefs": [
+          "report-event-input",
+          "report-missing-window-check",
+          "event-timestamp-stored"
+        ],
+        "summary": "The server relies on the stock agent to select buffered events inside a requested window, but does not independently enforce the task window at the report-ingestion boundary."
+      },
+      "ruleId": "report-window-validation.missing",
+      "severity": {
+        "level": "medium",
+        "rationale": "A compromised or modified enrolled agent can poison reports or upload more sensitive telemetry than an operator requested, but the attack is scoped to that agent identity."
+      },
+      "summary": "The report endpoint verifies task ownership but stores every submitted event timestamp without checking that it falls inside the task's requested window.",
+      "taxonomy": {
+        "category": "improper-input-validation",
+        "cwe": [
+          "CWE-20"
+        ]
+      },
+      "title": "Agent report ingestion accepts events outside the requested window",
+      "validation": {
+        "evidenceRefs": [
+          "report-missing-window-check",
+          "event-timestamp-stored"
+        ],
+        "limitations": [
+          "The reproduction used the repository's existing in-memory FastAPI test pattern rather than a live Docker/PostgreSQL deployment."
+        ],
+        "method": "static source trace plus local in-memory FastAPI reproduction",
+        "summary": "A one-hour task was created, then a report with an event timestamp from the previous day was submitted with the valid agent key. The endpoint returned 204 and the previous day's report returned the event."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "outcome": "resource exhaustion and degraded operator panel availability",
+          "sink": "API worker memory/CPU, PostgreSQL storage, and unpaginated report responses",
+          "source": "valid agent-controlled upload body",
+          "summary": "agent JSON body -> Pydantic model -> ORM/JSON serialization -> database -> unpaginated panel API reads"
+        },
+        "reachability": {
+          "attacker": "compromised or malicious enrolled agent",
+          "entrypoint": "POST `/api/v1/agents/{agent_id}/reports` or `/inventory`",
+          "outcome": "server-side resource pressure and large report responses",
+          "summary": "The attacker needs a valid key for one enrolled agent. The server scopes authentication by agent id, but that does not cap payload size."
+        },
+        "summary": "A compromised enrolled agent submits a report or inventory snapshot with very large arrays/objects, causing server memory/CPU and database growth and degrading later operator reads."
+      },
+      "codeEvidence": [
+        {
+          "code": "class EventIn(BaseModel):\n    category: EventCategory\n    occurred_at: datetime\n    payload: dict[str, Any] = Field(default_factory=dict)\n\n\nclass ReportIn(BaseModel):\n    task_id: uuid.UUID\n    events: list[EventIn] = Field(default_factory=list)",
+          "endLine": 22,
+          "explanation": "A valid agent can send any number of events with arbitrary JSON payload dictionaries.",
+          "id": "unbounded-events",
+          "label": "Report event list and payload objects are unconstrained",
+          "language": "python",
+          "path": "server/src/warden_server/schemas/event.py",
+          "role": "user_input",
+          "startLine": 12
+        },
+        {
+          "code": "class InventoryIn(BaseModel):\n    \"\"\"A full hardware/software snapshot sent periodically by an agent.\"\"\"\n\n    hardware: dict[str, Any]\n    software: dict[str, Any]",
+          "endLine": 19,
+          "explanation": "The server accepts full arbitrary hardware/software dictionaries with no shape or size limit.",
+          "id": "unbounded-inventory",
+          "label": "Inventory objects are arbitrary JSON dictionaries",
+          "language": "python",
+          "path": "server/src/warden_server/schemas/inventory.py",
+          "role": "user_input",
+          "startLine": 10
+        },
+        {
+          "code": "stored = [\n    Event(\n        agent_id=task.agent_id,\n        task_id=task.id,\n        category=event.category,\n        occurred_at=event.occurred_at,\n        payload=event.payload,\n    )\n    for event in events\n]\ndb.add_all(stored)",
+          "endLine": 74,
+          "explanation": "Large report bodies become a large Python list of ORM objects and are written in one request.",
+          "id": "events-materialized",
+          "label": "Every uploaded event is materialized before storage",
+          "language": "python",
+          "path": "server/src/warden_server/services/tasks.py",
+          "role": "sink",
+          "startLine": 63
+        }
+      ],
+      "confidence": {
+        "level": "high",
+        "rationale": "Pydantic/OpenAPI schemas have no max lengths or payload-size controls, handlers build full in-memory objects, and report endpoints return unpaginated result sets."
+      },
+      "findingId": "csf_e09896a15978bcd972ff9421",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:64bdab419c1a51db53a0c13a765dfaaff4c58fc7317a9978492f256c98c4584e"
+      },
+      "identity": {
+        "anchor": "agent-upload-apis-accept-unbounded-event-and-inventory-payloads"
+      },
+      "locations": [
+        {
+          "endLine": 22,
+          "path": "server/src/warden_server/schemas/event.py",
+          "role": "user_input",
+          "startLine": 12
+        },
+        {
+          "endLine": 19,
+          "path": "server/src/warden_server/schemas/inventory.py",
+          "role": "user_input",
+          "startLine": 10
+        },
+        {
+          "endLine": 74,
+          "path": "server/src/warden_server/services/tasks.py",
+          "role": "sink",
+          "startLine": 63
+        },
+        {
+          "endLine": 28,
+          "path": "server/src/warden_server/services/inventory.py",
+          "role": "sink",
+          "startLine": 21
+        },
+        {
+          "endLine": 67,
+          "path": "server/src/warden_server/api/reports.py",
+          "role": "outcome",
+          "startLine": 38
+        }
+      ],
+      "occurrenceId": "occ_616c297d94ecaccf01047f06",
+      "preventiveControls": [
+        "Treat every authenticated machine identity as potentially compromised and enforce server-owned resource quotas."
+      ],
+      "provenance": {
+        "candidateId": "candidate-unbounded-agent-upload",
+        "source": "baseline_and_parent_validation"
+      },
+      "remediation": "Set proxy and FastAPI request body limits; add Pydantic `max_length` and JSON field constraints for report and inventory payloads; enforce per-agent upload quotas; store large batches in bounded chunks; and paginate daily event and inventory-change read endpoints.",
+      "remediationTests": [
+        "Assert report uploads above the configured event count limit are rejected.",
+        "Assert inventory payloads above configured key/byte limits are rejected.",
+        "Assert report and inventory-change read endpoints paginate and cap response size."
+      ],
+      "rootCause": {
+        "evidenceRefs": [
+          "unbounded-events",
+          "unbounded-inventory",
+          "events-materialized"
+        ],
+        "summary": "The server authenticates agents but does not bound how much data one authenticated agent can send or later force the operator API to read."
+      },
+      "ruleId": "resource-limits.agent-upload",
+      "severity": {
+        "level": "medium",
+        "rationale": "The attack requires a valid per-agent key, but one compromised agent can consume API memory/CPU and database storage and degrade report reads for operators."
+      },
+      "summary": "Authenticated agent upload schemas allow unbounded event arrays and arbitrary JSON objects, and server handlers materialize/store them without API, database, or read-side pagination limits.",
+      "taxonomy": {
+        "category": "resource-exhaustion",
+        "cwe": [
+          "CWE-770"
+        ]
+      },
+      "title": "Agent upload APIs accept unbounded event and inventory payloads",
+      "validation": {
+        "evidenceRefs": [
+          "unbounded-events",
+          "unbounded-inventory",
+          "events-materialized"
+        ],
+        "limitations": [
+          "No load test was run during this scan."
+        ],
+        "method": "static source trace",
+        "summary": "No Pydantic `max_length`, request body limit, per-agent quota, or pagination control was found for report events, inventory objects, daily events, or inventory changes."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "outcome": "password spraying/brute-force attempts with limited visibility",
+          "sink": "operator authentication path and server CPU",
+          "source": "unauthenticated login request",
+          "summary": "login body -> operator lookup -> Argon2 verification -> 401 without audit/throttle"
+        },
+        "reachability": {
+          "attacker": "unauthenticated network client",
+          "entrypoint": "POST `/api/v1/auth/login`",
+          "outcome": "operator account guessing and CPU pressure",
+          "summary": "Login is intentionally unauthenticated and reachable through the proxy's `/api/*` route."
+        },
+        "summary": "A network attacker repeatedly posts credentials to `/api/v1/auth/login`. Failed attempts are not audited and existing-user guesses trigger Argon2 work."
+      },
+      "codeEvidence": [
+        {
+          "code": "invalid_credentials = HTTPException(\n    status.HTTP_401_UNAUTHORIZED, detail=\"Invalid username or password\"\n)\nif operator is None or not verify_password(\n    payload.password, operator.password_hash\n):\n    raise invalid_credentials\n\nlog_event(\n    db, actor=operator.username, action=\"operator.login\", target=operator.username\n)",
+          "endLine": 34,
+          "explanation": "Failed logins raise before `log_event()`; only successful authentication is audited.",
+          "id": "login-failure-no-audit",
+          "label": "Invalid credentials return before audit logging",
+          "language": "python",
+          "path": "server/src/warden_server/api/auth.py",
+          "role": "root_control",
+          "startLine": 16
+        },
+        {
+          "code": "_password_hasher = PasswordHasher()\n\n\ndef verify_password(password: str, password_hash: str) -> bool:\n    try:\n        return _password_hasher.verify(password_hash, password)\n    except VerifyMismatchError:\n        return False",
+          "endLine": 38,
+          "explanation": "Repeated wrong-password attempts against an existing username drive Argon2 verification work.",
+          "id": "argon2-cost",
+          "label": "Password verification is intentionally expensive",
+          "language": "python",
+          "path": "server/src/warden_server/security.py",
+          "role": "sink",
+          "startLine": 27
+        },
+        {
+          "code": "handle /api/* {\n    reverse_proxy server:8000\n}\n\nhandle {\n    reverse_proxy web:80\n}",
+          "endLine": 15,
+          "explanation": "The checked-in proxy has no rate-limit or request-shaping rule in front of `/api/v1/auth/login`.",
+          "id": "proxy-no-throttle",
+          "label": "Proxy configuration only routes API traffic",
+          "language": "caddyfile",
+          "path": "Caddyfile",
+          "role": "expected_control",
+          "startLine": 9
+        }
+      ],
+      "confidence": {
+        "level": "high",
+        "rationale": "The login handler only calls `log_event` on success, and no proxy/application throttling control is present in the reviewed FastAPI or Caddy configuration."
+      },
+      "findingId": "csf_90d36bf2b9a619b64bca3b53",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:91a79866e0f580ccf30fb74ecda5b45326b470964ae7bf2d964661ff463e4820"
+      },
+      "identity": {
+        "anchor": "operator-login-lacks-throttling-and-failed-attempt-audit"
+      },
+      "locations": [
+        {
+          "endLine": 34,
+          "path": "server/src/warden_server/api/auth.py",
+          "role": "root_control",
+          "startLine": 16
+        },
+        {
+          "endLine": 38,
+          "path": "server/src/warden_server/security.py",
+          "role": "sink",
+          "startLine": 27
+        },
+        {
+          "endLine": 15,
+          "path": "Caddyfile",
+          "role": "expected_control",
+          "startLine": 9
+        }
+      ],
+      "occurrenceId": "occ_27e6506f48a14e6308e911dd",
+      "preventiveControls": [
+        "Make authentication failures first-class audit events and put rate limits in front of every password-verification endpoint."
+      ],
+      "provenance": {
+        "candidateId": "candidate-login-throttle-audit",
+        "source": "baseline_and_parent_validation"
+      },
+      "remediation": "Add per-IP and per-username rate limiting/backoff, cap username/password lengths, audit failed login attempts without exposing credential details, and alert on repeated failures. Prefer enforcing limits both at Caddy/proxy and inside the FastAPI auth path.",
+      "remediationTests": [
+        "Assert failed login attempts create audit entries with action such as `operator.login_failed`.",
+        "Assert repeated failed attempts for the same username or IP are throttled.",
+        "Assert very large username/password bodies are rejected before expensive verification."
+      ],
+      "rootCause": {
+        "evidenceRefs": [
+          "login-failure-no-audit",
+          "argon2-cost",
+          "proxy-no-throttle"
+        ],
+        "summary": "The login endpoint implements credential verification but not abuse controls or failure audit. Invalid attempts are invisible to the audit log, and repeated requests are not delayed or capped at either the proxy or application layer."
+      },
+      "ruleId": "auth.login-throttling-audit",
+      "severity": {
+        "level": "medium",
+        "rationale": "The endpoint is unauthenticated and protects the administrator panel. Generic errors and Argon2 hashing help, but missing throttling and failure audit allow password spraying and CPU pressure with poor visibility."
+      },
+      "summary": "The operator login endpoint performs Argon2 password verification and returns 401 for invalid credentials without rate limiting, lockout, or an audit record for failed attempts.",
+      "taxonomy": {
+        "category": "authentication-hardening",
+        "cwe": [
+          "CWE-307",
+          "CWE-778"
+        ]
+      },
+      "title": "Operator login lacks throttling and failed-attempt audit",
+      "validation": {
+        "evidenceRefs": [
+          "login-failure-no-audit",
+          "proxy-no-throttle"
+        ],
+        "limitations": [
+          "External infrastructure rate limits, if any, were not supplied to this repository scan."
+        ],
+        "method": "static source trace",
+        "summary": "The reviewed routes and deployment config contain no lockout, rate limit, backoff, or failed-login audit path."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "outcome": "rogue enrollment or legitimate token consumption",
+          "sink": "permanent per-agent key returned by server",
+          "source": "plaintext first-run enrollment token in package-installed config",
+          "summary": "operator-issued token -> `config.toml` -> local read -> `/api/v1/enroll` -> permanent `agent_key`"
+        },
+        "reachability": {
+          "attacker": "unprivileged local workstation user",
+          "entrypoint": "package-installed agent config file",
+          "outcome": "unauthorized agent credential issuance",
+          "summary": "Requires local access during the setup window before the token is removed or consumed."
+        },
+        "summary": "Before first enrollment completes, a local low-privilege user reads the token from the packaged config and exchanges it at `/api/v1/enroll`."
+      },
+      "codeEvidence": [
+        {
+          "code": "# One-time token issued by an administrator (POST /api/v1/enrollment-tokens\n# on the server). Only needed for the very first start -- once enrolled,\n# the agent's id and key live in state_path below and this line can be\n# removed.\nenrollment_token = \"REPLACE-WITH-A-REAL-ENROLLMENT-TOKEN\"",
+          "endLine": 13,
+          "explanation": "The deployment flow requires a real bearer-like enrollment token to be written to the config before first enrollment.",
+          "id": "token-in-config",
+          "label": "First-run token is stored in config",
+          "language": "toml",
+          "path": "agent/config.example.toml",
+          "role": "user_input",
+          "startLine": 9
+        },
+        {
+          "code": "- src: ../../agent/config.example.toml\n  dst: /etc/warden-agent/config.toml\n  type: config|noreplace\n\n- dst: /var/lib/warden-agent\n  type: dir\n  file_info:\n    mode: 0700",
+          "endLine": 38,
+          "explanation": "The runtime state directory is hardened, but the config file that temporarily holds the enrollment token has no explicit owner-only mode.",
+          "id": "linux-config-no-mode",
+          "label": "Linux package sets state-directory mode, not config-file mode",
+          "language": "yaml",
+          "path": "packaging/nfpm/nfpm.yaml",
+          "role": "root_control",
+          "startLine": 31
+        },
+        {
+          "code": "<StandardDirectory Id=\"CommonAppDataFolder\">\n  <Directory Id=\"WardenAppDataFolder\" Name=\"Warden\">\n    <Directory Id=\"AgentAppDataFolder\" Name=\"agent\">\n      <Component Id=\"DefaultConfig\" Guid=\"6b8e2a1f-3c4d-4e9a-8f1b-9a2d6e5c7b3a\" NeverOverwrite=\"yes\">\n        <File\n          Id=\"ConfigToml\"\n          Source=\"$(var.WardenConfigExamplePath)\"\n          Name=\"config.toml\"\n          KeyPath=\"yes\" />",
+          "endLine": 68,
+          "explanation": "The MSI places the setup config under `%ProgramData%` but does not declare Administrators/SYSTEM-only permissions for the file or directory.",
+          "id": "windows-config-no-acl",
+          "label": "Windows installer config file has no restrictive ACL",
+          "language": "xml",
+          "path": "packaging/windows/Product.wxs",
+          "role": "root_control",
+          "startLine": 53
+        }
+      ],
+      "confidence": {
+        "level": "medium",
+        "rationale": "The source shows no explicit restrictive mode/ACL for the package-installed config. Actual inherited package/Windows ACL behavior was not live-tested in this scan."
+      },
+      "findingId": "csf_b131c7572b42317cba28d677",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:ca1331896879e95aa2c820e505bf4b1ce6f9184a7820cf9030dd7ecd19063a31"
+      },
+      "identity": {
+        "anchor": "packaged-agent-config-can-expose-first-run-enrollment-tokens"
+      },
+      "locations": [
+        {
+          "endLine": 13,
+          "path": "agent/config.example.toml",
+          "role": "user_input",
+          "startLine": 9
+        },
+        {
+          "endLine": 44,
+          "path": "docs/ru/usage.md",
+          "role": "entrypoint",
+          "startLine": 39
+        },
+        {
+          "endLine": 38,
+          "path": "packaging/nfpm/nfpm.yaml",
+          "role": "root_control",
+          "startLine": 31
+        },
+        {
+          "endLine": 68,
+          "path": "packaging/windows/Product.wxs",
+          "role": "root_control",
+          "startLine": 53
+        },
+        {
+          "endLine": 88,
+          "path": "server/src/warden_server/api/agents.py",
+          "role": "sink",
+          "startLine": 56
+        }
+      ],
+      "occurrenceId": "occ_bb2cc1d17ae56eda6f0cfee1",
+      "preventiveControls": [
+        "Classify setup-time config files containing bootstrap credentials as secrets until the credential is removed."
+      ],
+      "provenance": {
+        "candidateId": "candidate-first-run-config-token",
+        "source": "baseline_and_parent_validation"
+      },
+      "remediation": "Install agent config files with owner-only permissions: `0600` or root-only ownership on Linux, and Administrators/SYSTEM-only ACLs on Windows. Remove or blank `enrollment_token` automatically after successful enrollment, or pass it through a protected one-shot secret file/installer property that is deleted immediately.",
+      "remediationTests": [
+        "Assert built Linux packages set `/etc/warden-agent/config.toml` to an owner-only mode.",
+        "Add a Windows installer validation or documentation check for restrictive ACLs on `%ProgramData%\\Warden\\agent\\config.toml`.",
+        "Assert successful enrollment removes or clears `enrollment_token` when the agent owns the config path."
+      ],
+      "rootCause": {
+        "evidenceRefs": [
+          "token-in-config",
+          "linux-config-no-mode",
+          "windows-config-no-acl"
+        ],
+        "summary": "The setup flow temporarily treats `config.toml` as secret-bearing state, but package definitions treat it like ordinary configuration and do not enforce owner-only permissions or immediate token removal."
+      },
+      "ruleId": "insecure-config.enrollment-token-file",
+      "severity": {
+        "level": "medium",
+        "rationale": "A local workstation user can steal a short-lived token before enrollment and obtain a permanent agent key, but exploitation is local and setup-time bounded."
+      },
+      "summary": "Setup instructions place a real enrollment token in the agent config before first start, but the Linux and Windows package definitions do not set owner-only permissions on that config file.",
+      "taxonomy": {
+        "category": "insecure-file-permissions",
+        "cwe": [
+          "CWE-732"
+        ]
+      },
+      "title": "Packaged agent config can expose first-run enrollment tokens",
+      "validation": {
+        "evidenceRefs": [
+          "linux-config-no-mode",
+          "windows-config-no-acl"
+        ],
+        "limitations": [
+          "A live package install on Linux/Windows was not run to observe inherited permissions."
+        ],
+        "method": "static source trace",
+        "summary": "Linux hardens `/var/lib/warden-agent` but not `/etc/warden-agent/config.toml`; Windows WiX has no permission element for `%ProgramData%\\Warden\\agent\\config.toml`."
+      }
+    }
+  ],
+  "scanId": "29d9d1c1-fdf1-485f-92e4-6717f5d82088",
+  "schemaVersion": "1.0"
+}

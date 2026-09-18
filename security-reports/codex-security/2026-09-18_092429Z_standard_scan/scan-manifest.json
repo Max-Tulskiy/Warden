@@ -1,0 +1,92 @@
+{
+  "documentType": "codex-security.scan-manifest",
+  "scan": {
+    "artifacts": [
+      {
+        "mediaType": "application/json",
+        "path": "findings.json",
+        "sha256": "6e4b5f050d418a00bbbbd505ae279e9ba2053471f146553f82826e73b856ae5d"
+      },
+      {
+        "mediaType": "application/json",
+        "path": "coverage.json",
+        "sha256": "a4670226fe21dcb3a419485c3c2513001c6dc309072a16c9ef4154aa6a840d49"
+      }
+    ],
+    "completedAt": "2026-09-18T09:45:48.258854Z",
+    "coverageRef": "coverage.json",
+    "findingsRef": "findings.json",
+    "id": "29d9d1c1-fdf1-485f-92e4-6717f5d82088",
+    "preservedSources": {
+      "checkpoints/13937034299a74cc62a4668aa443fa77cf4700bbca716765fef484043b0f09b4.json": "ef07683ac433d9c08a5f577a65e938e9f38f88be585f298ef1c80dea8d05fa78",
+      "checkpoints/b8be9343d887b361b4df6eb301052a82325a6befd038a6d0d452e2799890f483.json": "b8be9343d887b361b4df6eb301052a82325a6befd038a6d0d452e2799890f483"
+    },
+    "producer": {
+      "name": "codex-security-plugin",
+      "version": "0.1.24"
+    },
+    "scope": {
+      "context": "User requested a Codex Security scan on this repository. Constitution priorities were applied: active-agent model, authenticated/encrypted agent-server exchange, no unsolicited category-event uploads except inventory/heartbeat, four-hour request windows on server and agent, bounded buffer retention, append-only inventory snapshots with separate change records, audit logging, honest coverage boundaries, and OpenAPI contract parity.",
+      "excludePaths": [],
+      "includePaths": [
+        "."
+      ],
+      "limitations": [
+        "Dependency advisory scans were not rerun during this prompt-only scan; the repository has CI security workflow coverage for pip-audit and CodeQL.",
+        "Docker Compose and the packaged installers were not executed.",
+        "The local ignored .env file contained placeholder values, but because it is explicitly ignored and outside tracked product source, it is recorded as a local deployment risk rather than a canonical source finding."
+      ],
+      "runtimeStatus": "No Docker stack was started and no external network access was used. Preflight passed with delegated workers available. Daybreak advisory returned not_granted.",
+      "summary": "Repository-wide Standard Codex Security scan of the current Warden worktree: FastAPI server, PostgreSQL models/migrations, React panel, Python agent, Linux/Windows packaging, Docker/Caddy deployment, OpenAPI contract, tests, specs, docs, and relevant local guidance/report context.",
+      "validationMode": "Static source trace with one targeted local in-memory FastAPI reproduction for report-window ingestion."
+    },
+    "sealedAt": "2026-09-18T09:45:48.258854Z",
+    "startedAt": "2026-09-18T09:24:29.095322Z",
+    "status": "completed",
+    "target": {
+      "displayName": "\u041b\u0420\u21163",
+      "kind": "git_worktree",
+      "revision": "eefb635ebb88b5b9d1c84724ea181fab4df55064",
+      "snapshotDigest": "codex-security-snapshot/v1:sha256:65e07c53f37a419b57f62c265b630e49071e522292aec106f525d4416137df9d",
+      "targetId": "target_sha256_ac6d969d219a5868f83ff31b770eb401fcb3c27c0b87706c261ffb5335a76df0"
+    },
+    "threatModel": {
+      "assets": [
+        "Operator credentials and JWTs.",
+        "Enrollment tokens and per-agent keys.",
+        "Workstation activity metadata in the local agent buffer and central events table.",
+        "Inventory snapshots, inventory change records, tasks, operators, and audit logs.",
+        "Agent local state containing the agent id/key."
+      ],
+      "assumptions": [
+        "Production uses the Compose/Caddy or equivalent HTTPS deployment, not direct public exposure of uvicorn.",
+        "Environment-provided production secrets are generated and protected outside tracked source; placeholder values in `.env.example` are not production secrets.",
+        "Browser-history coverage depends on supported browser profile files existing under the runtime account home and does not include incognito/unsupported-browser activity.",
+        "This scan inspected current local source state only, not Git history or external deployments."
+      ],
+      "attackerCapabilities": [
+        "Unauthenticated network caller can reach login and enrollment endpoints but needs credentials or a valid enrollment token for privileged operations.",
+        "Holder of an operator JWT can issue enrollment tokens, place requests, and read reports.",
+        "Holder of a valid agent key can act as that agent id for polling, report upload, and inventory upload.",
+        "Local workstation user may read setup-time files or influence local telemetry sources depending on platform permissions."
+      ],
+      "securityObjectives": [
+        "Only authenticated operators issue enrollment tokens, place requests, and read central reports.",
+        "Enrollment tokens are one-time credentials that mint exactly one permanent agent key.",
+        "Only active agents with the matching per-agent key can use agent-facing endpoints for their own id.",
+        "Category events leave the workstation only in response to a bounded `window_request`, and the server stores only events inside that window.",
+        "Authenticated agents cannot exhaust shared server resources with unbounded uploads.",
+        "Operator authentication failures are abuse-resistant and audit-visible."
+      ],
+      "summary": "Warden is an active-agent workstation monitoring system. Workstation agents collect local metadata into a SQLite buffer, initiate HTTPS/JSON calls to a FastAPI server, and a React operator panel lets authenticated administrators enroll agents, request bounded event windows, and view reports. The server deployment is Docker Compose with PostgreSQL, FastAPI, web, and Caddy TLS proxy; agent deployment is systemd on Linux and a Windows service.",
+      "trustBoundaries": [
+        "Operator browser to FastAPI operator API via JWT bearer token.",
+        "Agent process to FastAPI agent API via `X-Agent-Key`.",
+        "Caddy TLS proxy to internal server and web containers.",
+        "Server process to PostgreSQL database.",
+        "Local OS/browser/log/registry sources to agent collectors and buffer."
+      ]
+    }
+  },
+  "schemaVersion": "1.0"
+}
