@@ -1,0 +1,16 @@
+# Local/self-hosted TLS termination in front of the server and the web
+# panel (constitution principle 5). `tls internal` makes Caddy act as its
+# own certificate authority and issue a self-signed certificate for
+# {$WARDEN_DOMAIN} -- fine for a lab deployment; point a real CA-issued
+# certificate here instead for anything reachable from the public internet.
+{$WARDEN_DOMAIN:localhost} {
+    tls internal
+
+    handle /api/* {
+        reverse_proxy server:8000
+    }
+
+    handle {
+        reverse_proxy web:80
+    }
+}

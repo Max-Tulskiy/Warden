@@ -1,0 +1,58 @@
+# Security scanning, separate from ci.yml's build/test matrix: static
+# analysis (CodeQL) and software composition analysis (pip-audit against
+# the known-vulnerability database) for both the server and the agent.
+# ci.yml's bandit steps already cover per-commit static security linting of
+# our own code; this workflow is about third-party dependencies and a
+# deeper static pass, so it also runs weekly to catch a newly disclosed
+# advisory against a dependency that has not itself changed.
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  codeql:
+    name: CodeQL (static analysis)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        component: [server, agent]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          source-root: ${{ matrix.component }}/src
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python-${{ matrix.component }}"
+
+  pip-audit:
+    name: pip-audit (${{ matrix.component }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [server, agent]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]" pip-audit
+        working-directory: ${{ matrix.component }}
+      # --local scopes the audit to what actually got installed in this
+      # environment (see requirements above), not pip-audit's own broader
+      # default behavior of also resolving and auditing transitive extras
+      # this project never installs.
+      - run: pip-audit --local
+        working-directory: ${{ matrix.component }}

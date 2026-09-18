@@ -1,0 +1,21 @@
+<Project Sdk="WixToolset.Sdk/5.0.0">
+  <PropertyGroup>
+    <OutputName>warden-agent</OutputName>
+    <OutputType>Package</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Product.wxs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.0" />
+  </ItemGroup>
+
+  <!--
+    WardenVersion/WardenAgentExePath/WardenConfigExamplePath are passed on
+    the command line by release.yml (`dotnet build -p:WardenVersion=...`),
+    derived from the release tag -- not hardcoded here, so this project
+    file does not need editing for every release.
+  -->
+</Project>

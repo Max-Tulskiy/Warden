@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WiX v4/v5 source for the Windows agent installer.
+
+  Untested on a real Windows machine as of this writing -- written and only
+  checked by reading against the WiX v4 schema and documentation, the same
+  boundary the constitution's Section VI records for every Windows-only
+  piece of this project. The first real build and install happens in
+  release.yml's windows-latest job; a manual install/uninstall/upgrade
+  cycle on a real Windows 10/11 machine before shipping a release is a
+  separate, tracked step (specs/001-agent-server-complex/tasks.md).
+
+  ServiceInstall points at warden-agent.exe, which release.yml freezes from
+  warden_agent/service/windows.py (the pywin32 ServiceFramework entry point)
+  -- not warden_agent/__main__.py, which is a plain blocking CLI that does
+  not speak the Windows Service Control Manager's protocol at all.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="Warden Agent"
+    Manufacturer="Warden project"
+    Version="$(var.WardenVersion)"
+    UpgradeCode="8f3d3f7a-6c3b-4b0e-9f7a-2c1e6b6b6f9a">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Warden Agent is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Warden Agent">
+        <Component Id="ServiceExecutable" Guid="2d6a9b8e-5b7a-4a3f-9e0a-1c4b8f2a7d3e">
+          <File Id="WardenAgentExe" Source="$(var.WardenAgentExePath)" KeyPath="yes" />
+
+          <ServiceInstall
+            Id="WardenAgentServiceInstall"
+            Name="WardenAgent"
+            DisplayName="Warden Insider-Activity Monitoring Agent"
+            Description="Observes hardware/software inventory, removable media, printing, processes, and browsing history; reports on request from the Warden server."
+            Type="ownProcess"
+            Start="auto"
+            ErrorControl="normal"
+            Account="LocalSystem" />
+
+          <ServiceControl
+            Id="WardenAgentServiceControl"
+            Name="WardenAgent"
+            Start="install"
+            Stop="both"
+            Remove="uninstall" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="WardenAppDataFolder" Name="Warden">
+        <Directory Id="AgentAppDataFolder" Name="agent">
+          <!--
+            NeverOverwrite: an upgrade must not clobber a config an
+            administrator has already filled in with a real server_url and
+            enrollment_token (or, after first enrollment, that no longer
+            even needs enrollment_token at all).
+          -->
+          <Component Id="DefaultConfig" Guid="6b8e2a1f-3c4d-4e9a-8f1b-9a2d6e5c7b3a" NeverOverwrite="yes">
+            <File
+              Id="ConfigToml"
+              Source="$(var.WardenConfigExamplePath)"
+              Name="config.toml"
+              KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="Warden Agent" Level="1">
+      <ComponentRef Id="ServiceExecutable" />
+      <ComponentRef Id="DefaultConfig" />
+    </Feature>
+  </Package>
+</Wix>

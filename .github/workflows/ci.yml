@@ -1,0 +1,184 @@
+# Runs on every push and pull request: lint/type-check/security for the
+# server and the agent (constitution Section VI), their test suites, a web
+# lint+test+build, and a contract check. Installers and Docker images are
+# built only on a version tag -- see release.yml.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  server-quality:
+    name: server / ruff + mypy + bandit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: server/pyproject.toml
+      - run: pip install -e ".[dev]"
+        working-directory: server
+      - run: ruff check .
+        working-directory: server
+      - run: ruff format --check .
+        working-directory: server
+      - run: mypy src alembic
+        working-directory: server
+      - run: bandit -c pyproject.toml -r src
+        working-directory: server
+
+  server-test:
+    name: server / tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: server/pyproject.toml
+      - run: pip install -e ".[dev]"
+        working-directory: server
+      # No PostgreSQL service needed here (constitution principle 7): the
+      # whole suite runs against SQLite. server-postgres-smoke below covers
+      # the one thing that genuinely differs on real PostgreSQL.
+      - run: pytest --cov=warden_server --cov-report=term-missing --cov-fail-under=80
+        working-directory: server
+
+  server-postgres-smoke:
+    name: server / migrations + startup on real PostgreSQL
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: warden
+          POSTGRES_PASSWORD: warden
+          POSTGRES_DB: warden
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U warden"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      WARDEN_DATABASE_URL: postgresql+psycopg://warden:warden@localhost:5432/warden
+      WARDEN_JWT_SECRET: ci-smoke-secret-not-used-in-production-0000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: server/pyproject.toml
+      - run: pip install -e ".[dev]"
+        working-directory: server
+      - run: alembic upgrade head
+        working-directory: server
+      - name: Start the server and wait for /health
+        working-directory: server
+        run: |
+          uvicorn warden_server.main:app --host 127.0.0.1 --port 8000 &
+          for _ in $(seq 1 20); do
+            curl -sf http://127.0.0.1:8000/health && exit 0
+            sleep 1
+          done
+          echo "server did not become healthy in time" && exit 1
+
+  contract:
+    name: OpenAPI contract vs. running server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: server/pyproject.toml
+      - run: pip install -e ".[dev]" schemathesis
+        working-directory: server
+      - name: Start the server
+        working-directory: server
+        env:
+          WARDEN_JWT_SECRET: ci-contract-secret-not-used-in-production-0
+        run: |
+          uvicorn warden_server.main:app --host 127.0.0.1 --port 8000 &
+          for _ in $(seq 1 20); do
+            curl -sf http://127.0.0.1:8000/health && break
+            sleep 1
+          done
+      - name: schemathesis
+        run: >
+          schemathesis run contracts/openapi.yaml
+          --url http://127.0.0.1:8000
+          --checks not_a_server_error
+
+  agent-quality:
+    name: agent / ruff + mypy + bandit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: agent/pyproject.toml
+      - run: pip install -e ".[dev]"
+        working-directory: agent
+      - run: ruff check .
+        working-directory: agent
+      - run: ruff format --check .
+        working-directory: agent
+      - run: mypy src
+        working-directory: agent
+      - run: bandit -c pyproject.toml -r src
+        working-directory: agent
+
+  agent-test:
+    name: agent / tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install -e ".[dev]"
+        working-directory: agent
+      # windows-latest actually runs the pywin32/winreg-backed tests in
+      # test_*_windows_live.py (constitution Section VI) instead of skipping
+      # them, since dev installs the `windows` extra everywhere and the
+      # markers in each dependency only resolve pywin32 on win32 anyway.
+      - run: pytest --cov=warden_agent --cov-report=term-missing --cov-fail-under=80
+        working-directory: agent
+
+  web:
+    name: web / lint + test + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm run lint
+        working-directory: web
+      - run: npm run format
+        working-directory: web
+      - run: npm test
+        working-directory: web
+      - run: npm run build
+        working-directory: web

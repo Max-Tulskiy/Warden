@@ -1,0 +1,48 @@
+# Builds the Linux agent packages (.deb and .rpm) with nfpm from a
+# PyInstaller-frozen binary -- see .github/workflows/release.yml for the
+# freeze step that produces dist/warden-agent this file expects.
+#
+# One config, two package formats: `nfpm package --packager deb` and
+# `nfpm package --packager rpm` both read this file (constitution D-7).
+name: warden-agent
+arch: ${NFPM_ARCH}
+platform: linux
+version: ${NFPM_VERSION}
+section: admin
+priority: optional
+maintainer: "Warden project"
+description: |
+  Workstation agent of the Warden insider-activity monitoring complex.
+  Observes hardware/software inventory, removable media, printing,
+  processes, and browsing history; reports on request from the Warden
+  server.
+homepage: "https://example.invalid/warden"
+license: Proprietary
+
+contents:
+  - src: ../../dist/warden-agent
+    dst: /usr/bin/warden-agent
+    file_info:
+      mode: 0755
+
+  - src: ../systemd/warden-agent.service
+    dst: /usr/lib/systemd/system/warden-agent.service
+
+  - src: ../../agent/config.example.toml
+    dst: /etc/warden-agent/config.toml
+    type: config|noreplace
+
+  - dst: /var/lib/warden-agent
+    type: dir
+
+scripts:
+  postinstall: ./scripts/postinstall.sh
+  preremove: ./scripts/preremove.sh
+
+overrides:
+  rpm:
+    depends:
+      - systemd
+  deb:
+    depends:
+      - systemd

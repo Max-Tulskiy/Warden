@@ -1,0 +1,52 @@
+# Brings up the whole Warden server side: PostgreSQL, the FastAPI server
+# (migrations applied automatically on start, see server/docker-entrypoint.sh),
+# the web panel, and a Caddy reverse proxy terminating TLS in front of both
+# (constitution principle 5). The agent is not part of this file -- it runs
+# on a workstation, not alongside the server (see docs/ru/usage.md).
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-warden}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-warden}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-warden}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build: ./server
+    environment:
+      WARDEN_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-warden}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-warden}
+      WARDEN_JWT_SECRET: ${WARDEN_JWT_SECRET:?set WARDEN_JWT_SECRET in .env}
+      WARDEN_SEED_ADMIN_USERNAME: ${WARDEN_SEED_ADMIN_USERNAME:-}
+      WARDEN_SEED_ADMIN_PASSWORD: ${WARDEN_SEED_ADMIN_PASSWORD:-}
+      WARDEN_CORS_ORIGINS: '["https://${WARDEN_DOMAIN:-localhost}"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build: ./web
+
+  proxy:
+    image: caddy:2.8-alpine
+    ports:
+      - "443:443"
+      - "80:80"
+    environment:
+      WARDEN_DOMAIN: ${WARDEN_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - server
+      - web
+
+volumes:
+  postgres_data:
+  caddy_data:

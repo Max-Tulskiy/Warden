@@ -1,0 +1,23 @@
+# Runs as root deliberately, not as a dedicated system account: the agent
+# reads /sys/block and /proc/mounts (removable-media collector), the CUPS
+# page_log (owned by root:lp on most distributions), and whichever human
+# user's own profile directory holds their browser history -- the last of
+# these needs read access outside a fixed system account's own home
+# directory. This is the same trade-off most endpoint-monitoring agents
+# make; constitution Section V records web-history's resulting scope (the
+# account the service runs as) as an explicit boundary, not an oversight.
+[Unit]
+Description=Warden insider-activity monitoring agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/warden-agent --config /etc/warden-agent/config.toml
+Restart=on-failure
+RestartSec=5
+StateDirectory=warden-agent
+WorkingDirectory=/var/lib/warden-agent
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,147 @@
+# Builds installers and container images and publishes them to a GitHub
+# Release, triggered by pushing a tag matching `v*` (e.g. `v0.1.0`).
+#
+# linux-agent-package and windows-agent-installer both freeze the agent
+# with PyInstaller first: the Linux job freezes warden_agent/__main__.py
+# (the plain CLI, run under systemd as a foreground process); the Windows
+# job freezes warden_agent/service/windows.py instead, because that is the
+# module that actually speaks the Service Control Manager's protocol via
+# pywin32 -- __main__.py alone would not work as a Windows service.
+#
+# windows-agent-installer is the least-verified job in this workflow (no
+# Windows machine on the development side, constitution Section VI): its
+# first real run is this workflow's own first tag push, not a local dry
+# run beforehand. amd64 only for now, on both platforms -- PyInstaller
+# does not cross-compile, and arm64 runners are not part of this pipeline
+# yet.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  version:
+    name: derive version from the tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+  docker-images:
+    name: server + web container images
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        component: [server, web]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.component }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}:${{ needs.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}:latest
+
+  python-packages:
+    name: ${{ matrix.component }} wheel + sdist
+    needs: version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [server, agent]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build
+        working-directory: ${{ matrix.component }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.component }}/dist/*
+
+  linux-agent-package:
+    name: Linux agent package (.deb + .rpm)
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]" pyinstaller
+        working-directory: agent
+      - name: Freeze warden-agent
+        working-directory: agent
+        run: >
+          pyinstaller --onefile --name warden-agent
+          --distpath ../dist src/warden_agent/__main__.py
+      - name: Install nfpm
+        run: |
+          curl -sSfL https://github.com/goreleaser/nfpm/releases/latest/download/nfpm_amd64.deb -o /tmp/nfpm.deb
+          sudo dpkg -i /tmp/nfpm.deb
+      - name: Build .deb and .rpm
+        working-directory: packaging/nfpm
+        env:
+          NFPM_ARCH: amd64
+          NFPM_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          nfpm package --config nfpm.yaml --packager deb --target ../../warden-agent_${{ needs.version.outputs.version }}_amd64.deb
+          nfpm package --config nfpm.yaml --packager rpm --target ../../warden-agent-${{ needs.version.outputs.version }}.x86_64.rpm
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            warden-agent_${{ needs.version.outputs.version }}_amd64.deb
+            warden-agent-${{ needs.version.outputs.version }}.x86_64.rpm
+
+  windows-agent-installer:
+    name: Windows agent installer (.msi)
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]" pyinstaller
+        working-directory: agent
+      - name: Freeze warden-agent service
+        working-directory: agent
+        run: >
+          pyinstaller --onefile --name warden-agent
+          --distpath ../dist src/warden_agent/service/windows.py
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build the .msi
+        working-directory: packaging/windows
+        shell: bash
+        run: >
+          dotnet build warden-agent.wixproj
+          -p:WardenVersion=${{ needs.version.outputs.version }}
+          -p:WardenAgentExePath=../../dist/warden-agent.exe
+          -p:WardenConfigExamplePath=../../agent/config.example.toml
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: packaging/windows/bin/**/*.msi
