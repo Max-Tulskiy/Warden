@@ -93,6 +93,17 @@ Two independent mechanisms (constitution principle 5):
 - **Operators** (the panel) — a JWT issued on login
   (`POST /api/v1/auth/login`). Passwords are stored with Argon2id.
 
+Every failed login is written to `audit_log` as `operator.login_failed` (a
+reason only -- "unknown user" or "bad password" -- never the password
+itself), and after five failures in five minutes for that username the
+server answers 429 and logs `operator.login_throttled`; even a correct
+password does not bypass an active throttle (`services/throttle.py`). The
+counter lives in the process's own memory: accurate for the shipped
+deployment (uvicorn without `--workers`), but running multiple workers or
+replicas would multiply the effective limit, and a restart clears it -- an
+honestly documented limitation (constitution principle 10), not a solved
+problem.
+
 All external traffic runs over TLS, terminated at the Caddy reverse proxy
 (`docker-compose.yml`, `Caddyfile`), not by the application server itself.
 
@@ -127,7 +138,13 @@ The full list is constitution Section V. The essentials:
   instantly;
 - browser history is visible only for the OS account the agent service runs
   as -- on a genuinely shared, multi-user machine this does not cover every
-  account at once.
+  account at once;
+- one report is capped at 10,000 events, and an inventory snapshot at
+  10,000 hardware entries and 10,000 software entries each; reading the
+  daily event list or the change timeline returns at most 2,000 rows per
+  call (500 by default), with `limit`/`offset` pagination -- comfortable
+  headroom for real traffic (a window capped at 4h, polled once a minute),
+  but rows past the page size need a follow-up request to see.
 
 ## Answers to common questions
 

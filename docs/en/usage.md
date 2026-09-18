@@ -41,9 +41,15 @@ longer than needed.
    directly: `POST /api/v1/enrollment-tokens` with an
    `Authorization: Bearer <JWT>` header).
 2. On the workstation, put that token in the agent config's
-   `enrollment_token` field before the first start.
+   `enrollment_token` field before the first start. Until that field is
+   removed, the config carries a live one-time secret -- handle it like
+   one. Packages install `/etc/warden-agent/config.toml` at mode `0600`
+   inside a `0700` directory (Linux) and restrict the file to the
+   SYSTEM/Administrators accounts (Windows, unverified -- no test
+   machine).
 3. Once enrolled, the agent saves its issued key to `state.json` -- the
-   config's `enrollment_token` can then be removed, it is no longer needed.
+   config's `enrollment_token` line must then be deleted by hand, it does
+   not disappear on its own and is no longer needed.
 
 ## Installing the agent
 

@@ -70,3 +70,13 @@
 ## Security hardening
 
 - [x] T-42. Fix insecure Linux agent file permissions found by `security-reports/codex-security/scan_warden_20260916_001` (finding 1, medium): `AgentState.save()` and `Buffer.__init__` now `chmod(0o600)` the state file and SQLite buffer regardless of process umask; `packaging/systemd/warden-agent.service` sets `StateDirectoryMode=0700` and `packaging/nfpm/nfpm.yaml` sets `file_info.mode: 0700` on `/var/lib/warden-agent`; added umask-022 regression tests for both file creators
+
+Five findings from `security-reports/codex-security/2026-09-18_092429Z_standard_scan` (all medium):
+
+- [x] T-43. Claim enrollment tokens with a single conditional `UPDATE` instead of a SELECT-then-check, closing a concurrent-reuse race (CWE-362, finding "Concurrent enrollment can reuse a one-time token"); a rejected claim is now audited as `agent.enroll_rejected`
+- [x] T-44. Reject a report with 400 if any event falls outside its task's `[window_start, window_end)`, and require the task to be `DISPATCHED` rather than merely "not completed" (CWE-20, finding "Agent report ingestion accepts events outside the requested window"); audited as `agent.report_out_of_window`
+- [x] T-45. Cap `ReportIn.events` at 10,000 and `InventoryIn.hardware`/`software` at 10,000 entries each; add `limit`/`offset` pagination (default 500, max 2000) to the daily-report and inventory-change-timeline read endpoints, with a "Показать ещё" control in the panel; add a `request_body max_size 16MB` cap in `Caddyfile` (CWE-770, finding "Agent upload APIs accept unbounded event and inventory payloads")
+- [x] T-46. Audit failed operator logins as `operator.login_failed` (reason only, never the password) and throttle repeated failures per username via a new in-process `services/throttle.py` (5 attempts / 5 minutes, audited as `operator.login_throttled`); cap `LoginRequest` username/password length (CWE-307/CWE-778, finding "Operator login lacks throttling and failed-attempt audit")
+- [x] T-47. Restrict the packaged agent config to owner-only: `/etc/warden-agent` to `0700` and `config.toml` to `0600` in `packaging/nfpm/nfpm.yaml` (verified by building real `.deb`/`.rpm` packages locally); `util:PermissionEx` (SYSTEM/Administrators only) on the Windows config component in `packaging/windows/Product.wxs` (unverified -- no Windows machine, see plan.md §8) (CWE-732, finding "Packaged agent config can expose first-run enrollment tokens")
+
+All five verified end to end against the real docker-compose stack (Caddy + PostgreSQL), not just the SQLite test suite.
