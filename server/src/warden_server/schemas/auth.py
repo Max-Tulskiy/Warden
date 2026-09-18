@@ -1,11 +1,14 @@
 """Schemas for operator authentication."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    # Caps input length ahead of Argon2id verification (CWE-307): without
+    # this, an oversized password body pays the deliberately expensive
+    # hashing cost before being rejected.
+    username: str = Field(min_length=1, max_length=255)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 class TokenResponse(BaseModel):

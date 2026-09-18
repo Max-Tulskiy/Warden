@@ -576,9 +576,13 @@ components:
       properties:
         username:
           type: string
+          maxLength: 255
+          minLength: 1
           title: Username
         password:
           type: string
+          maxLength: 1024
+          minLength: 1
           title: Password
       type: object
       required:
