@@ -1,0 +1,674 @@
+openapi: 3.1.0
+info:
+  title: Warden
+  description: Insider-activity monitoring complex server
+  version: 0.1.0
+paths:
+  /api/v1/enrollment-tokens:
+    post:
+      tags:
+      - agents
+      summary: Create Enrollment Token
+      description: Issue a one-time token an administrator hands to a new agent.
+      operationId: create_enrollment_token_api_v1_enrollment_tokens_post
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrollmentTokenOut'
+      security:
+      - HTTPBearer: []
+  /api/v1/enroll:
+    post:
+      tags:
+      - agents
+      summary: Enroll
+      description: Register a new agent against a one-time enrollment token.
+      operationId: enroll_api_v1_enroll_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnrollRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrollResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agents/{agent_id}/tasks:
+    get:
+      tags:
+      - agents
+      summary: Poll Tasks
+      description: Return an agent's pending tasks and mark them dispatched.
+      operationId: poll_tasks_api_v1_agents__agent_id__tasks_get
+      parameters:
+      - name: agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Agent Id
+      - name: x-agent-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Agent-Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskOut'
+                title: Response Poll Tasks Api V1 Agents  Agent Id  Tasks Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agents/{agent_id}/reports:
+    post:
+      tags:
+      - agents
+      summary: Submit Report
+      description: Accept an agent's answer to a previously dispatched window-request
+        task.
+      operationId: submit_report_api_v1_agents__agent_id__reports_post
+      parameters:
+      - name: agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Agent Id
+      - name: x-agent-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Agent-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportIn'
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agents/{agent_id}/inventory:
+    post:
+      tags:
+      - agents
+      summary: Submit Inventory
+      description: Accept a periodic inventory snapshot; doubles as the agent's heartbeat.
+      operationId: submit_inventory_api_v1_agents__agent_id__inventory_post
+      parameters:
+      - name: agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Agent Id
+      - name: x-agent-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Agent-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryIn'
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agents/{agent_id}/requests:
+    post:
+      tags:
+      - requests
+      summary: Create Window Request
+      description: 'Place a request for a station''s data over a bounded time window.
+
+
+        `WindowRequestIn` already rejects a window over the configured maximum
+
+        (constitution principle 3); this endpoint only needs to confirm the
+
+        target agent exists.'
+      operationId: create_window_request_api_v1_agents__agent_id__requests_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Agent Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WindowRequestIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/login:
+    post:
+      tags:
+      - auth
+      summary: Login
+      operationId: login_api_v1_auth_login_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agents:
+    get:
+      tags:
+      - reports
+      summary: List Agents
+      operationId: list_agents_api_v1_agents_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/AgentOut'
+                type: array
+                title: Response List Agents Api V1 Agents Get
+      security:
+      - HTTPBearer: []
+  /api/v1/agents/{agent_id}/events:
+    get:
+      tags:
+      - reports
+      summary: Daily Report
+      description: 'Events received for the station on a given day (constitution:
+        daily reports).'
+      operationId: daily_report_api_v1_agents__agent_id__events_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Agent Id
+      - name: report_date
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+          title: Report Date
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventOut'
+                title: Response Daily Report Api V1 Agents  Agent Id  Events Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agents/{agent_id}/inventory/changes:
+    get:
+      tags:
+      - reports
+      summary: Inventory Changes
+      operationId: inventory_changes_api_v1_agents__agent_id__inventory_changes_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Agent Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InventoryChangeOut'
+                title: Response Inventory Changes Api V1 Agents  Agent Id  Inventory
+                  Changes Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      tags:
+      - health
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+components:
+  schemas:
+    AgentOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        hostname:
+          type: string
+          title: Hostname
+        os:
+          type: string
+          title: Os
+        status:
+          $ref: '#/components/schemas/AgentStatus'
+        enrolled_at:
+          type: string
+          format: date-time
+          title: Enrolled At
+        last_seen_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Seen At
+      type: object
+      required:
+      - id
+      - hostname
+      - os
+      - status
+      - enrolled_at
+      - last_seen_at
+      title: AgentOut
+    AgentStatus:
+      type: string
+      enum:
+      - active
+      - disabled
+      title: AgentStatus
+    EnrollRequest:
+      properties:
+        token:
+          type: string
+          title: Token
+        hostname:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Hostname
+        os:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Os
+      type: object
+      required:
+      - token
+      - hostname
+      - os
+      title: EnrollRequest
+    EnrollResponse:
+      properties:
+        agent_id:
+          type: string
+          format: uuid
+          title: Agent Id
+        agent_key:
+          type: string
+          title: Agent Key
+      type: object
+      required:
+      - agent_id
+      - agent_key
+      title: EnrollResponse
+    EnrollmentTokenOut:
+      properties:
+        token:
+          type: string
+          title: Token
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      type: object
+      required:
+      - token
+      - expires_at
+      title: EnrollmentTokenOut
+      description: The plaintext token, returned once at creation time and never again.
+    EventCategory:
+      type: string
+      enum:
+      - removable_media
+      - printing
+      - processes
+      - web
+      title: EventCategory
+    EventIn:
+      properties:
+        category:
+          $ref: '#/components/schemas/EventCategory'
+        occurred_at:
+          type: string
+          format: date-time
+          title: Occurred At
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+      type: object
+      required:
+      - category
+      - occurred_at
+      title: EventIn
+    EventOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        category:
+          $ref: '#/components/schemas/EventCategory'
+        occurred_at:
+          type: string
+          format: date-time
+          title: Occurred At
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+      type: object
+      required:
+      - id
+      - category
+      - occurred_at
+      - payload
+      title: EventOut
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    InventoryChangeOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        detected_at:
+          type: string
+          format: date-time
+          title: Detected At
+        added:
+          additionalProperties: true
+          type: object
+          title: Added
+        removed:
+          additionalProperties: true
+          type: object
+          title: Removed
+        modified:
+          additionalProperties: true
+          type: object
+          title: Modified
+      type: object
+      required:
+      - id
+      - detected_at
+      - added
+      - removed
+      - modified
+      title: InventoryChangeOut
+    InventoryIn:
+      properties:
+        hardware:
+          additionalProperties: true
+          type: object
+          title: Hardware
+        software:
+          additionalProperties: true
+          type: object
+          title: Software
+      type: object
+      title: InventoryIn
+      description: 'The body of `POST /api/v1/agents/{id}/inventory`.
+
+
+        Also doubles as the agent''s heartbeat: the server always updates
+
+        `last_seen_at` on receipt, regardless of whether the snapshot''s content
+
+        actually changed (constitution D-4).'
+    LoginRequest:
+      properties:
+        username:
+          type: string
+          title: Username
+        password:
+          type: string
+          title: Password
+      type: object
+      required:
+      - username
+      - password
+      title: LoginRequest
+    ReportIn:
+      properties:
+        task_id:
+          type: string
+          format: uuid
+          title: Task Id
+        events:
+          items:
+            $ref: '#/components/schemas/EventIn'
+          type: array
+          title: Events
+      type: object
+      required:
+      - task_id
+      title: ReportIn
+      description: 'The body of `POST /api/v1/agents/{id}/reports`: an agent''s answer
+        to one task.'
+    TaskKind:
+      type: string
+      enum:
+      - window_request
+      title: TaskKind
+    TaskOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        kind:
+          $ref: '#/components/schemas/TaskKind'
+        window_start:
+          type: string
+          format: date-time
+          title: Window Start
+        window_end:
+          type: string
+          format: date-time
+          title: Window End
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+      type: object
+      required:
+      - id
+      - kind
+      - window_start
+      - window_end
+      - status
+      title: TaskOut
+    TaskStatus:
+      type: string
+      enum:
+      - pending
+      - dispatched
+      - completed
+      - failed
+      title: TaskStatus
+    TokenResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        token_type:
+          type: string
+          title: Token Type
+          default: bearer
+      type: object
+      required:
+      - access_token
+      title: TokenResponse
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    WindowRequestIn:
+      properties:
+        window_start:
+          type: string
+          format: date-time
+          title: Window Start
+        window_end:
+          type: string
+          format: date-time
+          title: Window End
+      type: object
+      required:
+      - window_start
+      - window_end
+      title: WindowRequestIn
+      description: 'A request an operator places for a station''s data over a time
+        window.
+
+
+        The window is capped at `max_request_window_hours` (4 by default,
+
+        constitution principle 3); this is the server-side half of the check that
+
+        is repeated independently on the agent.'
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer
