@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Agent local buffer / config (never committed, generated at runtime)
+agent/*.db
+agent/*.db-journal
+
+# Node / web
+web/node_modules/
+web/dist/
+web/.vite/
+web/coverage/
+*.tsbuildinfo
+
+# PyInstaller (release.yml freezes the agent on demand; the .spec it
+# generates locally is not hand-maintained and not committed)
+*.spec
+
+# Docker
+.env
+
+# Packaging build output
+packaging/windows/bin/
+packaging/windows/obj/
+*.msi
+*.deb
+*.rpm
+
+# Docs build
+docs/site/
+
+# macOS
+.DS_Store
+._*
