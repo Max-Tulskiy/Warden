@@ -140,9 +140,31 @@ def submit_report(
     task = db.get(Task, payload.task_id)
     if task is None or task.agent_id != agent.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Unknown task")
-    if task.status == TaskStatus.COMPLETED:
+    if task.status != TaskStatus.DISPATCHED:
         raise HTTPException(
-            status.HTTP_409_CONFLICT, detail="Task has already been completed"
+            status.HTTP_409_CONFLICT, detail="Task is not awaiting a report"
+        )
+
+    outside_window = [
+        event
+        for event in payload.events
+        if not (task.window_start <= event.occurred_at < task.window_end)
+    ]
+    if outside_window:
+        log_event(
+            db,
+            actor=str(agent.id),
+            action="agent.report_out_of_window",
+            target=str(task.id),
+            detail={
+                "rejected": len(outside_window),
+                "total": len(payload.events),
+            },
+        )
+        db.commit()
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Report contains events outside the requested window",
         )
 
     tasks_service.complete_task(db, task=task, events=payload.events)
