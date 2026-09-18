@@ -28,9 +28,19 @@ contents:
   - src: ../systemd/warden-agent.service
     dst: /usr/lib/systemd/system/warden-agent.service
 
+  - dst: /etc/warden-agent
+    type: dir
+    file_info:
+      mode: 0700
+
+  # Owner-only: until the operator deletes the enrollment_token line
+  # after first enrollment (docs/ru/usage.md), this file carries a
+  # live one-time credential (CWE-732, Codex Security 2026-09-18).
   - src: ../../agent/config.example.toml
     dst: /etc/warden-agent/config.toml
     type: config|noreplace
+    file_info:
+      mode: 0600
 
   - dst: /var/lib/warden-agent
     type: dir

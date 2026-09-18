@@ -15,7 +15,9 @@
   point), not warden_agent/__main__.py, which is a plain blocking CLI that
   does not speak the Windows Service Control Manager's protocol at all.
 -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix
+  xmlns="http://wixtoolset.org/schemas/v4/wxs"
+  xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Package
     Name="Warden Agent"
     Manufacturer="Warden project"
@@ -58,13 +60,24 @@
             administrator has already filled in with a real server_url and
             enrollment_token (or, after first enrollment, that no longer
             even needs enrollment_token at all).
+
+            PermissionEx below replaces the inherited ACL (which grants
+            ordinary Users read access under %ProgramData%) with an
+            Administrators/SYSTEM-only one: until the operator deletes the
+            enrollment_token line after first enrollment, this file carries
+            a live one-time credential (CWE-732, Codex Security
+            2026-09-18). Unverified on a real Windows machine, like the
+            rest of this installer; see the file-level comment above.
           -->
           <Component Id="DefaultConfig" Guid="6b8e2a1f-3c4d-4e9a-8f1b-9a2d6e5c7b3a" NeverOverwrite="yes">
             <File
               Id="ConfigToml"
               Source="$(var.WardenConfigExamplePath)"
               Name="config.toml"
-              KeyPath="yes" />
+              KeyPath="yes">
+              <util:PermissionEx User="SYSTEM" GenericAll="yes" />
+              <util:PermissionEx User="Administrators" GenericAll="yes" />
+            </File>
           </Component>
         </Directory>
       </Directory>
