@@ -2,7 +2,7 @@
 <!--
   WiX v4/v5 source for the Windows agent installer.
 
-  Untested on a real Windows machine as of this writing -- written and only
+  Untested on a real Windows machine as of this writing, written and only
   checked by reading against the WiX v4 schema and documentation, the same
   boundary the constitution's Section VI records for every Windows-only
   piece of this project. The first real build and install happens in
@@ -11,9 +11,9 @@
   separate, tracked step (specs/001-agent-server-complex/tasks.md).
 
   ServiceInstall points at warden-agent.exe, which release.yml freezes from
-  warden_agent/service/windows.py (the pywin32 ServiceFramework entry point)
-  -- not warden_agent/__main__.py, which is a plain blocking CLI that does
-  not speak the Windows Service Control Manager's protocol at all.
+  warden_agent/service/windows.py (the pywin32 ServiceFramework entry
+  point), not warden_agent/__main__.py, which is a plain blocking CLI that
+  does not speak the Windows Service Control Manager's protocol at all.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
