@@ -1,6 +1,6 @@
 # Warden Project Constitution
 
-**Version:** 1.0.1 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-15
+**Version:** 1.0.2 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-20
 
 This document defines the project's purpose, mandatory development principles,
 its structure, and the decisions already made. The constitution takes priority
@@ -402,7 +402,15 @@ What Warden does not do and does not promise:
   user's own profile directory instead. On a genuinely shared workstation,
   covering every account requires either running the service as each user in
   turn or extending the web collector to enumerate profile directories under
-  every home directory — neither is done today.
+  every home directory — neither is done today;
+* **the cross-station report shows only what stations have delivered in answer
+  to window requests** (principle 2), not everything they did in the period: a
+  station whose window was never requested appears empty however much happened
+  on it, and overlapping requests can store the same event twice, since events
+  are not deduplicated on ingestion;
+* **changing an operator's password does not end sessions already issued** — a
+  session is a stateless JWT valid until it expires (8 hours by default), so a
+  stolen token keeps working after the password is changed.
 
 ---
 
@@ -444,3 +452,4 @@ What Warden does not do and does not promise:
 |---|---|---|
 | 1.0.0 | 2026-09-15 | Initial edition: principles, structure, and decisions for the Warden complex (agent-server, active-agent model, native data sources, enrollment token + TLS). The assignment's original text was folded in here as the normative source; the reference-only `Task.md` was removed from the repository |
 | 1.0.1 | 2026-09-15 | PATCH: Section V gained a boundary noting that web-history collection is scoped to whichever account the agent service runs as, not every account on a shared machine — found while designing the systemd packaging (Section II, `packaging/systemd/`). No principle or decision changed |
+| 1.0.2 | 2026-09-20 | PATCH: Section V gained two boundaries surfaced while planning the panel's reports and settings (`specs/002-panel-reports-and-settings/`): the cross-station report shows only events delivered through window requests (and can show duplicates, since ingestion does not deduplicate), and a password change does not end sessions already issued. No principle or decision changed |
