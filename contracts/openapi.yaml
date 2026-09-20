@@ -230,6 +230,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/password:
+    post:
+      tags:
+      - auth
+      summary: Change Password
+      description: 'Change the signed-in operator''s own password.
+
+
+        Already-issued session tokens are stateless JWTs and keep working until
+
+        they expire; nothing here revokes them. Failed attempts are throttled
+
+        under a key of their own, so a holder of a stolen token cannot use this
+
+        endpoint to lock the operator out of login.'
+      operationId: change_password_api_v1_auth_password_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeIn'
+        required: true
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/v1/agents:
     get:
       tags:
@@ -675,6 +708,24 @@ components:
       - username
       - password
       title: LoginRequest
+    PasswordChangeIn:
+      properties:
+        current_password:
+          type: string
+          maxLength: 1024
+          minLength: 1
+          title: Current Password
+        new_password:
+          type: string
+          maxLength: 1024
+          minLength: 12
+          title: New Password
+      type: object
+      required:
+      - current_password
+      - new_password
+      title: PasswordChangeIn
+      description: The body of `POST /api/v1/auth/password`.
     ReportEventOut:
       properties:
         id:
