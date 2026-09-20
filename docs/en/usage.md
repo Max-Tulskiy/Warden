@@ -28,8 +28,9 @@ the self-signed certificate -- expected for a local/self-hosted deployment;
 point `WARDEN_DOMAIN` at a real domain instead and Caddy will obtain a real
 Let's Encrypt certificate automatically).
 
-**Change the administrator password after first login** and remove
-`WARDEN_SEED_ADMIN_USERNAME`/`WARDEN_SEED_ADMIN_PASSWORD` from `.env` -- the
+**Change the administrator password after first login** (panel → "Настройки"
+(Settings) → "Смена пароля" (Change password); at least 12 characters) and
+remove `WARDEN_SEED_ADMIN_USERNAME`/`WARDEN_SEED_ADMIN_PASSWORD` from `.env` -- the
 bootstrap only creates an account when there is no operator at all yet, so a
 later container restart with the same variables changes nothing, but there
 is no reason to keep a production password sitting in `.env` in the clear
@@ -50,6 +51,30 @@ longer than needed.
 3. Once enrolled, the agent saves its issued key to `state.json` -- the
    config's `enrollment_token` line must then be deleted by hand, it does
    not disappear on its own and is no longer needed.
+
+## Working in the panel
+
+**Reports.** The "Отчёты" (Reports) section shows the events of several
+stations at once over a chosen period: "last hour", "last 24 hours", "last 7
+days", or a custom one. You can narrow it to specific stations (none ticked
+means all) and to a category. The report shows only events the stations
+delivered in answer to window requests: to see a station's activity over the
+period you care about, request a window for it (the station page, at most 4
+hours per request). Repeated requests for overlapping windows can put
+duplicates in the report -- there is no deduplication on ingestion.
+
+**Settings.** Three blocks: changing your password (the current password is
+required; sessions already issued stay valid after the change until they
+expire, the lifetime being shown in the policy), the server policy
+(read-only: limits and lifetimes are set by the server's configuration), and
+the list of stations.
+
+**Disabling a station.** The "Отключить" (Disable) button in the stations
+block (with a confirmation) blocks the agent's key: on its next contact it
+gets a 401. The station's events and inventory are kept. "Включить" (Enable)
+puts the station back to work with the same key, no new enrollment. A
+disabled station's agent keeps polling the server and writing 401 errors to
+its own log -- that is expected; the server does not log these rejections.
 
 ## Installing the agent
 
@@ -120,6 +145,30 @@ live check of platform-specific code on a real system. As of this release:
 |---|---|
 | Linux | All five collectors, on the development machine: real `dpkg`/`psutil` data (inventory), a real subprocess and a real `psutil`-observed process (processes), temporary SQLite files matching the Chrome/Firefox schema (websites). The full `.deb`/`.rpm` build via `nfpm` from an actually-frozen PyInstaller binary was run and the packages' contents inspected. |
 | Windows | **Not checked live** -- there is no Windows machine on the development side. The code is written against the documented APIs (`pywin32`, `winreg`, `win32evtlog`) and type-checked; all of the *parsing logic* (`parse_uninstall_entries`, `parse_print_event_xml`, the device diff) is unit-tested on fixtures on any platform. CI (`ci.yml`, the `agent-test` job) genuinely runs the `test_*_windows_live.py` tests on a `windows-latest` runner -- the first real exercise of the `pywin32`/`winreg` calls, not just a code read-through. The `.msi` build (`release.yml`) is likewise built for real only in CI, on the first tag push, not verified locally beforehand. |
+
+Disabling a station (see "Working in the panel") is covered by an end-to-end
+integration test: the agent's real `ServerClient` and `run_poll_pass` against
+the real server app -- a 401 after the station is disabled, with no retries,
+and recovery once it is re-enabled. The behavior of a disabled agent on a
+real Linux or Windows workstation has **not** been checked.
+
+The "Отчёты" (Reports) and "Настройки" (Settings) screens were additionally
+walked through by hand on the real stack (`docker compose`: Caddy +
+PostgreSQL, a separate project with clean volumes): login; a password change
+(wrong current password -- 400, too-short new one -- 422, success -- the new
+password logs in and the old one is refused); two "agents" delivering
+windows; the cross-station report (station and category filters, a week-long
+range, paging, a reversed range -- 422); disabling and re-enabling a station
+(a disabled station's poll, report, and inventory calls get a 401 -- the same
+response as a wrong key; after re-enabling the same key works again); the
+`audit_log` rows, and no passwords in it. The `ix_events_occurred_at`
+migration was applied, reversed, and applied again on PostgreSQL over the
+previous revision's schema. Both screens were opened in a real browser
+(Chromium driven by Playwright). What this does **not** prove: the "agents"
+were HTTP calls from a script, not the agent service on Linux or Windows; the
+index was checked on three rows (the planner uses it once sequential scans
+are disabled), not on a large table; and there was only one browser --
+Chromium.
 
 This is not an oversight -- it follows directly from constitution principle
 10 ("honesty about boundaries"): naming the actual level of confidence beats

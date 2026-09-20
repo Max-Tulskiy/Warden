@@ -81,6 +81,38 @@ to detect configuration changes" requirement is implemented -- snapshots
 never overwrite each other, the full history stays visible, and a change is
 immediately visible to the administrator as its own record.
 
+## Panel reports and settings
+
+**The cross-station report** (`GET /api/v1/events`) shows the events of one,
+several, or all stations over an arbitrary period. Parameters: `start` and
+`end` (required), `agent_id` (repeatable), `category`, `limit`/`offset`. The
+range is half-open, `[start, end)`, like the window-boundary check when an
+agent's report is accepted. Rows are ordered by `(occurred_at, id)`, so paging
+neither loses nor repeats events that share a timestamp. Each row carries
+`agent_id` and the station's *current* name (the name is not versioned). The
+4-hour cap does not apply to the report: it governs the request the server
+places with an agent (principle 3), while the report only reads what is
+already stored, so a week-long range is allowed. `events` has an index,
+`ix_events_occurred_at`, for the time lookup.
+
+**The server policy** (`GET /api/v1/policy`) is read-only: the request-window
+cap, the lifetime of an enrollment token and of a session, the minimum
+password length, and the limits on an agent report, an inventory snapshot,
+and a page of results. Each value is read from where it is actually enforced,
+and the response is an explicit list of fields rather than a dump of the
+settings, so a secret (`jwt_secret`, the database connection string) cannot
+reach it by accident. These values cannot be changed from the panel -- only
+through the server's configuration.
+
+**Disabling a station** (`PATCH /api/v1/agents/{id}` with status `disabled` or
+`active`). Enforcement is the existing `require_agent` dependency: an agent
+that is not `active` gets the same 401 as one presenting a wrong key. The key
+is not changed by disabling, so re-enabling puts the station back to work
+without a new enrollment. A real status change is written to the audit log
+(`agent.disabled`, `agent.enabled`); setting the status it already has is
+not. The agent itself does not crash on a 401: its scheduler loop catches the
+exception, the error goes to its local log, and polling carries on.
+
 ## Authentication
 
 Two independent mechanisms (constitution principle 5):
@@ -103,6 +135,23 @@ deployment (uvicorn without `--workers`), but running multiple workers or
 replicas would multiply the effective limit, and a restart clears it -- an
 honestly documented limitation (constitution principle 10), not a solved
 problem.
+
+An operator changes their own password through `POST /api/v1/auth/password`
+(a valid token is required). The server re-verifies the current password with
+Argon2id; the new password must be at least 12 and at most 1024 characters
+and differ from the current one. A wrong current password is a 400 (not a 401,
+so the panel does not mistake it for an expired session) and is logged as
+`operator.password_change_failed`; a successful change is logged as
+`operator.password_change`. Repeated failures are limited by the same
+mechanism as login (five in five minutes, a 429 response,
+`operator.password_change_throttled`), but under a key of its own: the holder
+of a stolen token cannot use this endpoint to lock the real operator out of
+login. The passwords themselves never reach the log. Changing the password
+does **not** revoke sessions already issued: a JWT is self-contained and stays
+valid until it expires (`jwt_expire_minutes`, 8 hours by default) -- a
+limitation, not a solved problem. The seed account from `WARDEN_SEED_ADMIN_*`
+is created only when the operators table is empty, so restarting the
+container does not bring the old password back.
 
 All external traffic runs over TLS, terminated at the Caddy reverse proxy
 (`docker-compose.yml`, `Caddyfile`), not by the application server itself.
@@ -144,7 +193,22 @@ The full list is constitution Section V. The essentials:
   daily event list or the change timeline returns at most 2,000 rows per
   call (500 by default), with `limit`/`offset` pagination -- comfortable
   headroom for real traffic (a window capped at 4h, polled once a minute),
-  but rows past the page size need a follow-up request to see.
+  but rows past the page size need a follow-up request to see;
+- the cross-station report reads only what is already on the server, and
+  events get there solely through window requests (principle 2). It is not
+  "everything the fleet did in the period": a station whose window was never
+  requested shows nothing, however much happened on it;
+- repeated requests for overlapping windows store the same event twice --
+  there is no deduplication on ingestion, so the report (like the daily one)
+  can show duplicates;
+- changing the password does not end sessions already issued: a stolen token
+  works until it expires (8 hours by default);
+- a disabled agent keeps contacting the server once per poll interval and
+  getting a 401, logging the error locally; the server does not audit these
+  rejections (that would be about 1,440 rows a day per station). A window
+  request can still be placed for a disabled station: it stays queued until
+  the station is re-enabled, after which the agent answers from a buffer that
+  has already been partly pruned.
 
 ## Answers to common questions
 
