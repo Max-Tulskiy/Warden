@@ -475,6 +475,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/policy:
+    get:
+      tags:
+      - policy
+      summary: Get Policy
+      description: Return the limits the server enforces, read from where they are
+        enforced.
+      operationId: get_policy_api_v1_policy_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyOut'
+      security:
+      - HTTPBearer: []
   /health:
     get:
       tags:
@@ -726,6 +743,48 @@ components:
       - new_password
       title: PasswordChangeIn
       description: The body of `POST /api/v1/auth/password`.
+    PolicyOut:
+      properties:
+        max_request_window_hours:
+          type: integer
+          title: Max Request Window Hours
+        enrollment_token_ttl_hours:
+          type: integer
+          title: Enrollment Token Ttl Hours
+        session_lifetime_minutes:
+          type: integer
+          title: Session Lifetime Minutes
+        min_password_length:
+          type: integer
+          title: Min Password Length
+        max_report_events:
+          type: integer
+          title: Max Report Events
+        max_inventory_entries:
+          type: integer
+          title: Max Inventory Entries
+        max_page_size:
+          type: integer
+          title: Max Page Size
+      type: object
+      required:
+      - max_request_window_hours
+      - enrollment_token_ttl_hours
+      - session_lifetime_minutes
+      - min_password_length
+      - max_report_events
+      - max_inventory_entries
+      - max_page_size
+      title: PolicyOut
+      description: 'Server limits an administrator can see but not change from the
+        panel.
+
+
+        An explicit allow-list: every field is named here on purpose, so a secret
+
+        or connection string in `Settings` can never reach the response by being
+
+        added there.'
     ReportEventOut:
       properties:
         id:
