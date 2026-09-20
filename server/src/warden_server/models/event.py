@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import Enum, ForeignKey
+from sqlalchemy import Enum, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
 from warden_server.db import Base, UTCDateTime, json_column_type
@@ -20,6 +20,9 @@ class EventCategory(StrEnum):
 
 class Event(Base):
     __tablename__ = "events"
+    # Serves the cross-station report, which filters on time alone; without it
+    # that query would scan the whole table.
+    __table_args__ = (Index("ix_events_occurred_at", "occurred_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     agent_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agents.id"))

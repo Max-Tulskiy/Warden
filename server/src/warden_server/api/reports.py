@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, date, datetime, timedelta
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
@@ -15,13 +16,16 @@ from warden_server.models.inventory import InventoryChange
 from warden_server.schemas.agent import AgentOut
 from warden_server.schemas.event import EventOut
 from warden_server.schemas.inventory import InventoryChangeOut
+from warden_server.schemas.report import (
+    DEFAULT_PAGE_SIZE,
+    MAX_PAGE_SIZE,
+    ReportEventOut,
+    ReportFilter,
+)
 
 router = APIRouter(
     prefix="/api/v1", tags=["reports"], dependencies=[Depends(require_operator)]
 )
-
-DEFAULT_PAGE_SIZE = 500
-MAX_PAGE_SIZE = 2000
 
 
 @router.get("/agents", response_model=list[AgentOut])
@@ -55,6 +59,46 @@ def daily_report(
         .scalars()
         .all()
     )
+
+
+@router.get("/events", response_model=list[ReportEventOut])
+def fleet_report(
+    report: Annotated[ReportFilter, Query()], db: Session = Depends(get_db)
+) -> list[ReportEventOut]:
+    """Events across stations for a time range, each labeled with its station.
+
+    Reads events the server already holds, which reach it only through window
+    requests (constitution principle 2) -- it is not everything the stations
+    did. The range is half-open, `[start, end)`, like the window check on
+    report ingestion; `id` breaks ties so offset paging stays stable when
+    several events share a timestamp.
+    """
+    query = (
+        select(Event, Agent.hostname)
+        .join(Agent, Event.agent_id == Agent.id)
+        .where(Event.occurred_at >= report.start, Event.occurred_at < report.end)
+    )
+    if report.agent_id:
+        query = query.where(Event.agent_id.in_(report.agent_id))
+    if report.category is not None:
+        query = query.where(Event.category == report.category)
+
+    rows = db.execute(
+        query.order_by(Event.occurred_at, Event.id)
+        .limit(report.limit)
+        .offset(report.offset)
+    ).all()
+    return [
+        ReportEventOut(
+            id=event.id,
+            category=event.category,
+            occurred_at=event.occurred_at,
+            payload=event.payload,
+            agent_id=event.agent_id,
+            hostname=hostname,
+        )
+        for event, hostname in rows
+    ]
 
 
 @router.get(

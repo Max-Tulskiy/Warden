@@ -306,6 +306,92 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/events:
+    get:
+      tags:
+      - reports
+      summary: Fleet Report
+      description: 'Events across stations for a time range, each labeled with its
+        station.
+
+
+        Reads events the server already holds, which reach it only through window
+
+        requests (constitution principle 2) -- it is not everything the stations
+
+        did. The range is half-open, `[start, end)`, like the window check on
+
+        report ingestion; `id` breaks ties so offset paging stays stable when
+
+        several events share a timestamp.'
+      operationId: fleet_report_api_v1_events_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: start
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          title: Start
+      - name: end
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          title: End
+      - name: agent_id
+        in: query
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+          title: Agent Id
+      - name: category
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/EventCategory'
+          - type: 'null'
+          title: Category
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 2000
+          minimum: 1
+          default: 500
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReportEventOut'
+                title: Response Fleet Report Api V1 Events Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/agents/{agent_id}/inventory/changes:
     get:
       tags:
@@ -589,6 +675,42 @@ components:
       - username
       - password
       title: LoginRequest
+    ReportEventOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        category:
+          $ref: '#/components/schemas/EventCategory'
+        occurred_at:
+          type: string
+          format: date-time
+          title: Occurred At
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+        agent_id:
+          type: string
+          format: uuid
+          title: Agent Id
+        hostname:
+          type: string
+          title: Hostname
+      type: object
+      required:
+      - id
+      - category
+      - occurred_at
+      - payload
+      - agent_id
+      - hostname
+      title: ReportEventOut
+      description: 'One event of a cross-station report, labeled with its station.
+
+
+        `hostname` is the station''s current name; it is not versioned.'
     ReportIn:
       properties:
         task_id:
