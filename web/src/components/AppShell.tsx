@@ -1,11 +1,15 @@
 import type { ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../state/authContext";
 import { LogoutIcon, ReportsIcon, SettingsIcon, ShieldIcon, StationsIcon } from "./icons";
 
 function operatorInitials(username: string): string {
   return username.slice(0, 2).toUpperCase();
+}
+
+function navClassName({ isActive }: { isActive: boolean }): string {
+  return isActive ? "shell-nav-item active" : "shell-nav-item";
 }
 
 export function AppShell({ children, narrow }: { children: ReactNode; narrow?: boolean }) {
@@ -43,20 +47,18 @@ export function AppShell({ children, narrow }: { children: ReactNode; narrow?: b
 
       <div className="shell-body">
         <nav className="shell-sidebar">
-          <div className="shell-nav-item active">
+          <NavLink to="/agents" className={navClassName}>
             <StationsIcon />
             Станции
-          </div>
-          {/* Placeholders for future sections -- not yet real screens, so
-              deliberately non-interactive rather than linking to nothing. */}
-          <div className="shell-nav-item">
+          </NavLink>
+          <NavLink to="/reports" className={navClassName}>
             <ReportsIcon />
             Отчёты
-          </div>
-          <div className="shell-nav-item">
+          </NavLink>
+          <NavLink to="/settings" className={navClassName}>
             <SettingsIcon />
             Настройки
-          </div>
+          </NavLink>
         </nav>
 
         <main className={`shell-content${narrow ? " shell-content-narrow" : ""}`}>

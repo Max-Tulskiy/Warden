@@ -30,6 +30,21 @@ export interface EventRecord {
   payload: Record<string, unknown>;
 }
 
+export interface FleetEvent extends EventRecord {
+  agent_id: string;
+  hostname: string;
+}
+
+export interface Policy {
+  max_request_window_hours: number;
+  enrollment_token_ttl_hours: number;
+  session_lifetime_minutes: number;
+  min_password_length: number;
+  max_report_events: number;
+  max_inventory_entries: number;
+  max_page_size: number;
+}
+
 export interface InventoryChange {
   id: string;
   detected_at: string;

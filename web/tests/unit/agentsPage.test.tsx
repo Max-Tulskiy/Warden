@@ -62,4 +62,36 @@ describe("AgentsPage", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("shows a disabled station as disabled and leaves it out of the online count", async () => {
+    const seenJustNow = new Date().toISOString();
+    const station = (id: string, hostname: string, status: "active" | "disabled") => ({
+      id,
+      hostname,
+      os: "linux",
+      status,
+      enrolled_at: seenJustNow,
+      last_seen_at: seenJustNow,
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (input.toString() === "/api/v1/agents") {
+          return new Response(
+            JSON.stringify([
+              station("a-1", "WS-01", "active"),
+              station("a-2", "WS-02", "disabled"),
+            ]),
+            { status: 200 },
+          );
+        }
+        throw new Error(`unexpected request: ${input.toString()}`);
+      }),
+    );
+
+    renderAgentsPage();
+
+    expect(await screen.findByText("отключена")).toBeInTheDocument();
+    expect(screen.getByText("в сети")).toBeInTheDocument();
+    expect(screen.getByText("2 всего · 1 в сети")).toBeInTheDocument();
+  });
 });

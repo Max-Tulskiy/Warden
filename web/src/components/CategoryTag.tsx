@@ -1,12 +1,6 @@
 import type { EventRecord } from "../api/types";
+import { CATEGORY_LABELS } from "../lib/categories";
 import { MediaIcon, PrintIcon, ProcessIcon, WebIcon } from "./icons";
-
-const LABELS: Record<EventRecord["category"], string> = {
-  removable_media: "Носители",
-  printing: "Печать",
-  processes: "Процессы",
-  web: "Сайты",
-};
 
 const COLOR_VARS: Record<EventRecord["category"], { color: string; bg: string }> = {
   removable_media: { color: "var(--cat-media)", bg: "var(--cat-media-bg)" },
@@ -28,7 +22,7 @@ export function CategoryTag({ category }: { category: EventRecord["category"] })
   return (
     <span className="cat-tag" style={{ background: bg, color }}>
       <Icon />
-      {LABELS[category]}
+      {CATEGORY_LABELS[category]}
     </span>
   );
 }

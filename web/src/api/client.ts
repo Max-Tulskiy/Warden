@@ -1,4 +1,12 @@
-import type { Agent, EnrollmentToken, EventRecord, InventoryChange, Task } from "./types";
+import type {
+  Agent,
+  EnrollmentToken,
+  EventRecord,
+  FleetEvent,
+  InventoryChange,
+  Policy,
+  Task,
+} from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -85,6 +93,54 @@ export function getEvents(
   if (page.limit !== undefined) params.set("limit", String(page.limit));
   if (page.offset !== undefined) params.set("offset", String(page.offset));
   return request<EventRecord[]>(`/agents/${agentId}/events?${params}`, { token });
+}
+
+export interface FleetFilters {
+  start: string;
+  end: string;
+  agentIds?: string[];
+  category?: EventRecord["category"];
+}
+
+export function getFleetEvents(
+  token: string,
+  filters: FleetFilters,
+  page: PageParams = {},
+): Promise<FleetEvent[]> {
+  const params = new URLSearchParams({ start: filters.start, end: filters.end });
+  for (const agentId of filters.agentIds ?? []) params.append("agent_id", agentId);
+  if (filters.category) params.set("category", filters.category);
+  if (page.limit !== undefined) params.set("limit", String(page.limit));
+  if (page.offset !== undefined) params.set("offset", String(page.offset));
+  return request<FleetEvent[]>(`/events?${params}`, { token });
+}
+
+export function getPolicy(token: string): Promise<Policy> {
+  return request<Policy>("/policy", { token });
+}
+
+export function changePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  return request<void>("/auth/password", {
+    method: "POST",
+    token,
+    body: { current_password: currentPassword, new_password: newPassword },
+  });
+}
+
+export function setAgentStatus(
+  token: string,
+  agentId: string,
+  status: Agent["status"],
+): Promise<Agent> {
+  return request<Agent>(`/agents/${agentId}`, {
+    method: "PATCH",
+    token,
+    body: { status },
+  });
 }
 
 export function getInventoryChanges(

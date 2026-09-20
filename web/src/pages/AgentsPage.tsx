@@ -6,15 +6,8 @@ import type { Agent, EnrollmentToken } from "../api/types";
 import { AppShell } from "../components/AppShell";
 import { CopyIcon, KeyIcon } from "../components/icons";
 import { StatusPill } from "../components/StatusPill";
+import { stationStatus } from "../lib/stationStatus";
 import { useAuth } from "../state/authContext";
-
-const ONLINE_THRESHOLD_MINUTES = 5;
-
-function isOnline(lastSeenAt: string | null): boolean {
-  if (!lastSeenAt) return false;
-  const elapsedMinutes = (Date.now() - new Date(lastSeenAt).getTime()) / 60_000;
-  return elapsedMinutes < ONLINE_THRESHOLD_MINUTES;
-}
 
 export function AgentsPage() {
   const { token } = useAuth();
@@ -33,7 +26,7 @@ export function AgentsPage() {
   }, [token]);
 
   const onlineCount = useMemo(
-    () => agents?.filter((agent) => isOnline(agent.last_seen_at)).length ?? 0,
+    () => agents?.filter((agent) => stationStatus(agent) === "online").length ?? 0,
     [agents],
   );
 
@@ -155,9 +148,7 @@ export function AgentsPage() {
                   </td>
                   <td className="text-secondary">{agent.os}</td>
                   <td>
-                    <StatusPill
-                      status={isOnline(agent.last_seen_at) ? "online" : "offline"}
-                    />
+                    <StatusPill status={stationStatus(agent)} />
                   </td>
                   <td className="mono text-secondary">
                     {agent.last_seen_at
