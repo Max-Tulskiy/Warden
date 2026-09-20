@@ -19,6 +19,12 @@ class EnrollResponse(BaseModel):
     agent_key: str
 
 
+class AgentStatusIn(BaseModel):
+    """The body of `PATCH /api/v1/agents/{id}`: enable or disable a station."""
+
+    status: AgentStatus
+
+
 class AgentOut(BaseModel):
     id: uuid.UUID
     hostname: str

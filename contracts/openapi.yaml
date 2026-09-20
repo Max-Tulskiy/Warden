@@ -46,6 +46,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agents/{agent_id}:
+    patch:
+      tags:
+      - agents
+      summary: Set Agent Status
+      description: 'Enable or disable a station.
+
+
+        Enforcement lives in `require_agent`, which rejects any agent that is not
+
+        `ACTIVE` exactly as it rejects a wrong key; this endpoint only flips the
+
+        flag. Setting the current status again is a no-op and is not audited.'
+      operationId: set_agent_status_api_v1_agents__agent_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: agent_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Agent Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentStatusIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/agents/{agent_id}/tasks:
     get:
       tags:
@@ -549,6 +592,15 @@ components:
       - active
       - disabled
       title: AgentStatus
+    AgentStatusIn:
+      properties:
+        status:
+          $ref: '#/components/schemas/AgentStatus'
+      type: object
+      required:
+      - status
+      title: AgentStatusIn
+      description: 'The body of `PATCH /api/v1/agents/{id}`: enable or disable a station.'
     EnrollRequest:
       properties:
         token:

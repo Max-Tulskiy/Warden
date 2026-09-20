@@ -2,9 +2,11 @@
 
 Together these implement the active-agent model of constitution D-1: the
 agent is always the one initiating a request; nothing here pushes to the
-agent.
+agent. The operator-facing endpoints in this module (enrollment tokens,
+enabling/disabling a station) only change server-side state.
 """
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
@@ -20,7 +22,12 @@ from warden_server.models.agent import Agent, AgentStatus
 from warden_server.models.enrollment import EnrollmentToken
 from warden_server.models.operator import Operator
 from warden_server.models.task import Task, TaskStatus
-from warden_server.schemas.agent import EnrollRequest, EnrollResponse
+from warden_server.schemas.agent import (
+    AgentOut,
+    AgentStatusIn,
+    EnrollRequest,
+    EnrollResponse,
+)
 from warden_server.schemas.enrollment import EnrollmentTokenOut
 from warden_server.schemas.event import ReportIn
 from warden_server.schemas.inventory import InventoryIn
@@ -109,6 +116,40 @@ def enroll(payload: EnrollRequest, db: Session = Depends(get_db)) -> EnrollRespo
     )
     db.commit()
     return EnrollResponse(agent_id=agent.id, agent_key=agent_key)
+
+
+@router.patch("/agents/{agent_id}", response_model=AgentOut)
+def set_agent_status(
+    agent_id: uuid.UUID,
+    payload: AgentStatusIn,
+    operator: Operator = Depends(require_operator),
+    db: Session = Depends(get_db),
+) -> Agent:
+    """Enable or disable a station.
+
+    Enforcement lives in `require_agent`, which rejects any agent that is not
+    `ACTIVE` exactly as it rejects a wrong key; this endpoint only flips the
+    flag. Setting the current status again is a no-op and is not audited.
+    """
+    agent = db.get(Agent, agent_id)
+    if agent is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Unknown agent")
+
+    if agent.status != payload.status:
+        agent.status = payload.status
+        log_event(
+            db,
+            actor=operator.username,
+            action=(
+                "agent.disabled"
+                if payload.status == AgentStatus.DISABLED
+                else "agent.enabled"
+            ),
+            target=str(agent.id),
+            detail={"hostname": agent.hostname},
+        )
+        db.commit()
+    return agent
 
 
 @router.get("/agents/{agent_id}/tasks", response_model=list[TaskOut])
