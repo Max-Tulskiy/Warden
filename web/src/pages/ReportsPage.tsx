@@ -4,23 +4,15 @@ import { getFleetEvents, listAgents, type FleetFilters } from "../api/client";
 import type { Agent, FleetEvent } from "../api/types";
 import { AppShell } from "../components/AppShell";
 import { EventList } from "../components/EventList";
+import { RangeFilter } from "../components/RangeFilter";
 import { CATEGORIES, CATEGORY_LABELS, type EventCategory } from "../lib/categories";
-import { presetRange, validateReportRange, type RangePreset } from "../lib/reportRange";
+import { presetRange, resolveRange, type Preset } from "../lib/reportRange";
 import { useAuth } from "../state/authContext";
 
 // Matches the server's own DEFAULT_PAGE_SIZE
 // (server/src/warden_server/schemas/report.py) -- if a page comes back full,
 // there may be more to load.
 const PAGE_SIZE = 500;
-
-type Preset = RangePreset | "custom";
-
-const PRESETS: { value: Preset; label: string }[] = [
-  { value: "hour", label: "Последний час" },
-  { value: "day", label: "Последние 24 часа" },
-  { value: "week", label: "Последние 7 дней" },
-  { value: "custom", label: "Свой период" },
-];
 
 const LOAD_ERROR = "Не удалось загрузить отчёт";
 
@@ -76,22 +68,13 @@ export function ReportsPage() {
   }, [token]);
 
   const buildFilters = (): FleetFilters | null => {
-    let range: { start: string; end: string };
-    if (preset === "custom") {
-      const problem = validateReportRange(customStart, customEnd);
-      if (problem) {
-        setFormError(problem);
-        return null;
-      }
-      range = {
-        start: new Date(customStart).toISOString(),
-        end: new Date(customEnd).toISOString(),
-      };
-    } else {
-      range = presetRange(preset, new Date());
+    const resolved = resolveRange(preset, customStart, customEnd, new Date());
+    if ("error" in resolved) {
+      setFormError(resolved.error);
+      return null;
     }
     return {
-      ...range,
+      ...resolved.range,
       agentIds: selectedAgentIds,
       category: category || undefined,
     };
@@ -140,40 +123,14 @@ export function ReportsPage() {
       <h1 style={{ margin: "0 0 20px 0", fontSize: 20, fontWeight: 700 }}>Отчёты</h1>
 
       <form className="card report-filters" onSubmit={handleApply}>
-        <div className="segmented" role="group" aria-label="Период">
-          {PRESETS.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              className={preset === item.value ? "segmented-item active" : "segmented-item"}
-              aria-pressed={preset === item.value}
-              onClick={() => setPreset(item.value)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        {preset === "custom" && (
-          <div className="filter-row">
-            <label style={{ flex: 1 }}>
-              Начало
-              <input
-                type="datetime-local"
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-              />
-            </label>
-            <label style={{ flex: 1 }}>
-              Конец
-              <input
-                type="datetime-local"
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-              />
-            </label>
-          </div>
-        )}
+        <RangeFilter
+          preset={preset}
+          customStart={customStart}
+          customEnd={customEnd}
+          onPresetChange={setPreset}
+          onCustomStartChange={setCustomStart}
+          onCustomEndChange={setCustomEnd}
+        />
 
         <div className="filter-row">
           <label style={{ minWidth: 220 }}>
