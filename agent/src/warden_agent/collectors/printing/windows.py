@@ -125,4 +125,6 @@ class WindowsPrintingCollector:
                     )
             return xml_events
         finally:
-            win32evtlog.EvtClose(handle)
+            # pywin32 has no EvtClose(): a PyEVT_HANDLE is closed through
+            # its own Close(), like any other PyHANDLE.
+            handle.Close()
