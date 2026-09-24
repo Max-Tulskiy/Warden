@@ -1,6 +1,6 @@
 # Warden Project Constitution
 
-**Version:** 1.2.0 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-24
+**Version:** 1.3.0 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-24
 
 This document defines the project's purpose, mandatory development principles,
 its structure, and the decisions already made. The constitution takes priority
@@ -386,6 +386,32 @@ roles, or permissions granted one by one (nothing needs them, and a table this
 short can be verified in full); limiting an observer to particular stations (a
 separate feature with its own effect on the data model).
 
+### D-11. Operating limits are stored, edited by administrators, and bounded
+
+Three operating limits -- the longest request window, the lifetime of an
+enrollment token, and the lifetime of a session -- are edited by administrators
+in the panel and stored in the database as one saved set. The server's
+configuration gives them their defaults, and a saved set outranks it until an
+administrator returns to the defaults. One place, the policy service, decides
+which value is in force, and every use (a window request, an enrollment token, a
+session) reads it there afresh, so a change applies from the next use and holds
+across several server processes. Sessions, tokens, and requests that already
+exist keep what they were issued with.
+
+Each value has fixed bounds. The request window's upper bound is principle 3's
+four hours, and it is a constant in code, not a setting: no configuration and no
+saved value can raise it, and a configured value above it is clamped to it. The
+server checks that ceiling on its own, before any database read, and the agent
+still checks it independently.
+
+Considered and rejected: per-value overrides (one value could follow the
+configuration while another did not, and "which is in force" would need a table
+for an answer); making the ceiling a setting (principle 3 fixes it, and anyone
+able to save a setting could raise it); reading the settings at each use behind
+a cache that a save must invalidate (wrong across several processes); ending
+existing sessions when the session length is shortened (D-9 already gives a
+deliberate way to do that).
+
 ---
 
 ## IV. Spec-driven development
@@ -474,6 +500,16 @@ What Warden does not do and does not promise:
   active** — the rule that nobody changes their own account guarantees a
   remaining administrator only while actions are sequential; repairing that race
   needs direct access to the database;
+* **a policy change applies only from the next use** -- sessions, enrollment
+  tokens, and window requests that already exist keep the lifetime or limit they
+  were issued with, so shortening a session or a token lifetime ends nothing that
+  is already out there (D-11);
+* **there is one policy for the whole deployment, and the audit log is its only
+  history** -- no setting per operator or per station, no history screen, and no
+  undo beyond returning to the server's configured values;
+* **a saved policy outranks the server's configuration until it is reset** --
+  after an administrator saves, editing the configuration alone changes nothing
+  for the three values;
 * **the audit log is not a complete record** — it records actions that change
   something or authenticate someone. Reads (reports, station lists, the log
   itself) are not recorded, and neither are the requests a disabled station's
@@ -526,3 +562,4 @@ What Warden does not do and does not promise:
 | 1.0.3 | 2026-09-24 | PATCH: Section V gained two boundaries surfaced while planning the audit log viewer (`specs/003-audit-log-viewer/`): the log records changes and sign-ins, not reads or a disabled station's rejected requests, and it is append-only only by server code, not enforced by the database. No principle or decision changed |
 | 1.1.0 | 2026-09-24 | MINOR: added decision D-9 (sessions are stateless tokens carrying a per-operator version, so a password change or an explicit request ends them) and rewrote the Section V boundary that said a password change does not end sessions, which no longer holds; what remains true is that sessions can only be ended all at once and only by their owner. See `specs/004-session-revocation/` |
 | 1.2.0 | 2026-09-24 | MINOR: added decision D-10 (two roles, an administrator and an observer, enforced by the server on every request with the role read from the database and not carried in the token; accounts are disabled, never deleted) and three Section V boundaries that come with it: an observer sees everything collected, an initial or reset password is known to the administrator who set it, and two administrators acting on each other at once can leave none active. The Section V sessions boundary was widened to say an administrator can also end an operator's sessions. See `specs/005-operator-management/` |
+| 1.3.0 | 2026-09-24 | MINOR: added decision D-11 (the request window limit, the enrollment token lifetime, and the session lifetime are stored as one saved set, edited by administrators within fixed bounds, and read afresh at every use; the four-hour window ceiling is a constant in code and the server's configuration is the default) and three Section V boundaries that come with it: a change applies only from the next use, one policy serves the whole deployment with the audit log as its only history, and a saved policy outranks the configuration until it is reset. See `specs/006-editable-policy/` |
