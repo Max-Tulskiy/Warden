@@ -63,7 +63,7 @@ connection is not workable in practice.
 | `inventory_snapshots` | Full hardware/software snapshots, append-only, never overwritten |
 | `inventory_changes` | Separate records of detected changes (added/removed/modified) |
 | `operators` | Panel administrator accounts |
-| `audit_log` | Every notable action: enrollment, task dispatch, login, configuration changes |
+| `audit_log` | Every notable action: enrollment, task dispatch, login, configuration changes; read in the panel on the "Журнал" (audit log) screen |
 
 ### Configuration-change detector
 
@@ -112,6 +112,33 @@ without a new enrollment. A real status change is written to the audit log
 (`agent.disabled`, `agent.enabled`); setting the status it already has is
 not. The agent itself does not crash on a 401: its scheduler loop catches the
 exception, the error goes to its local log, and polling carries on.
+
+## Audit log
+
+The server writes every notable action to `audit_log` (principle 8): station
+enrollment, task dispatch, receipt of a report or an inventory snapshot, a
+detected configuration change, an operator's login and password change, a
+window request, an enrollment-token issue, and disabling or enabling a station.
+The log can be read in the panel ("Журнал") or through `GET /api/v1/audit`.
+
+Query parameters: `start` and `end` (required), `actor`, `action`,
+`limit`/`offset`. The range is half-open, `[start, end)`, like the cross-station
+report. Rows are ordered newest first, by `(occurred_at DESC, id)`, so paging
+neither loses nor repeats entries that share a timestamp. `actor` is matched
+exactly and can be an operator's username, a station id, or the hostname
+announced while registering. `action` is either an exact code
+(`operator.login`) or a group, that is, the part of a code before its first dot
+(`operator` matches every `operator.*`). A plain string prefix would return
+`operator.login_failed` together with `operator.login`, so a group is matched
+only at the dot. The four-hour cap does not apply to reading the log: it governs
+the request the server places with an agent (principle 3). `audit_log` has an
+index, `ix_audit_log_occurred_at`, for the time range.
+
+The panel shows actions under Russian names; a code with no name (for example,
+one added by a newer server version) is shown as it is, so an entry is never
+hidden. A station id in the "Кто" (who) and "Объект" (target) columns is replaced
+by the station's hostname when the station list has loaded. Reading the log is
+not itself written to it, like every other read in the panel.
 
 ## Authentication
 
@@ -203,6 +230,17 @@ The full list is constitution Section V. The essentials:
   can show duplicates;
 - changing the password does not end sessions already issued: a stolen token
   works until it expires (8 hours by default);
+- the audit log is incomplete: it records changes and sign-ins, but not reads
+  (reports, station lists, the log itself) and not the rejections a disabled
+  station receives;
+- the audit log is not protected against edits: it is "append-only" only in how
+  the server code uses it. There is no trigger or permission restriction in the
+  database, so anyone with write access to PostgreSQL can change or delete rows,
+  and the panel will not show that;
+- the actor of an entry has not always been verified: for a rejected
+  registration (`agent.enroll_rejected`) it is the hostname sent by a caller who
+  has no valid token at that point. The panel renders it as text, never as
+  markup;
 - a disabled agent keeps contacting the server once per poll interval and
   getting a 401, logging the error locally; the server does not audit these
   rejections (that would be about 1,440 rows a day per station). A window

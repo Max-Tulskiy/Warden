@@ -76,6 +76,21 @@ puts the station back to work with the same key, no new enrollment. A
 disabled station's agent keeps polling the server and writing 401 errors to
 its own log -- that is expected; the server does not log these rejections.
 
+**Audit log.** The "Журнал" (audit log) screen shows audit log entries for the
+chosen period ("Последний час" (last hour), "Последние 24 часа" (last 24 hours),
+"Последние 7 дней" (last 7 days), or a custom one), newest first: the time, the
+action, who performed it, what it was performed on, and the details. Actions are
+shown under Russian names; a code with no name is shown as it is. Entries can
+be narrowed by actor (an operator's username, a station id, or a hostname --
+matched exactly) and by action: one specific action or a group, for example "Все
+действия операторов" (all operator actions). To check whether someone is guessing
+the password, choose "Неудачный вход оператора" (failed operator login). A station
+id is shown as the station's hostname when the station list has loaded. If more
+entries match than fit on a page, "Показать ещё" (show more) loads the next ones.
+The log records changes and sign-ins, but not reads and not the rejections a
+disabled station receives, and anyone with database access can alter its
+entries -- the hint under the filters says the same.
+
 ## Installing the agent
 
 ### Windows 10/11 (`.msi`)
@@ -169,6 +184,28 @@ were HTTP calls from a script, not the agent service on Linux or Windows; the
 index was checked on three rows (the planner uses it once sequential scans
 are disabled), not on a large table; and there was only one browser --
 Chromium.
+
+The "Журнал" (audit log) screen was walked through by hand on a real stack
+(`docker compose`: Caddy + PostgreSQL 16, a separate project with fresh volumes,
+the proxy on non-standard ports). Entries were created by real calls: a failed and
+a successful login, an enrollment token, two station enrollments, a rejected
+enrollment whose hostname was `<img src=x onerror=alert(1)>`, a station disabled
+and re-enabled, and two inventory uploads with a change. Checked: reading through
+the proxy; newest-first order; the `operator` group and the exact code
+`operator.login` (without `operator.login_failed`); a partial code returning
+nothing; an actor combined with a group; a station id as the actor; paging with no
+gaps or repeats; 422 for a reversed range and for `%` in the action; 401 without a
+token; a 30-day range; and no new entries after reading the log. With 600 rejected
+logins the first page is exactly 500 rows, "Показать ещё" loads the rest with no
+repeats, and the button then disappears. In a real browser (Chromium driven by
+Playwright): a hostname is shown instead of a station id, the `<img ...>` text is
+shown literally and creates no element, the hint about the log's limits is in
+place, and there were no console errors. The migration of the
+`ix_audit_log_occurred_at` index was applied, reverted, and applied again on
+PostgreSQL. What this does **not** prove: the "stations" were HTTP calls from a
+script, not the agent service on Linux or Windows; the index was checked on a few
+hundred rows, and that period queries actually use it was not verified (the query
+plan was not examined); and there was only one browser -- Chromium.
 
 This is not an oversight -- it follows directly from constitution principle
 10 ("honesty about boundaries"): naming the actual level of confidence beats
