@@ -73,3 +73,17 @@ def test_every_snapshot_is_kept_even_when_unchanged(db_session):
         .all()
     )
     assert len(snapshots) == 2
+
+
+def test_a_returned_change_already_has_its_id(db_session):
+    """Callers such as the audit entry refer to the change by id, and an id
+    the database has not assigned yet reads as None."""
+    change = ingest_snapshot(
+        db_session,
+        agent_id=uuid.uuid4(),
+        hardware={"cpu": "x86_64"},
+        software={"nginx": "1.24"},
+    )
+
+    assert change is not None
+    assert isinstance(change.id, uuid.UUID)

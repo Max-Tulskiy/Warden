@@ -91,4 +91,7 @@ def ingest_snapshot(
         modified={"hardware": hw_modified, "software": sw_modified},
     )
     db.add(change)
+    # The id is a column default that only exists after a flush; callers (the
+    # audit entry) name the change by it, so it must be assigned before return.
+    db.flush()
     return change
