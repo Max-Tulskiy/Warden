@@ -1,6 +1,6 @@
 # Warden Project Constitution
 
-**Version:** 1.1.0 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-24
+**Version:** 1.2.0 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-24
 
 This document defines the project's purpose, mandatory development principles,
 its structure, and the decisions already made. The constitution takes priority
@@ -358,6 +358,34 @@ tokens with a refresh token (a larger change than the problem warrants).
 Consequence: only all of an operator's sessions can be ended together, never one
 alone, and sessions are not listed. The boundary is stated in Section V.
 
+### D-10. Two roles, enforced by the server on every request
+
+An operator account is either an administrator or an observer. An observer may
+read what was collected (stations, reports, inventory changes, the operating
+policy) and manage their own password and sessions. Everything that acts on the
+complex (asking a station for data, issuing an enrollment token, enabling or
+disabling a station), the audit log, and the management of accounts are for
+administrators. The server makes the check on every request, as a dependency of
+the endpoint, and reads the role from the operator's row each time instead of
+carrying it in the session token, so a change applies to the person's next
+action with nothing to reissue. A refused observer gets 403, not 401, so the
+panel can tell "you may not" from "your session ended". Hiding a control in the
+panel is a courtesy and never the control itself. Two tests keep this honest: one
+walks the API's own schema and fails when any operation other than sign-in,
+agent enrollment, and health can be reached without a credential; the other
+compares every operator endpoint with the table of what each role may do.
+
+Accounts are only disabled, never deleted, so that the names in the audit log
+keep pointing at someone. An administrator cannot change their own role or
+status, so the panel's own actions cannot leave the deployment without an active
+administrator.
+
+Considered and rejected: carrying the role in the token (a demotion would wait
+for the token to expire or for the session version to be raised); more than two
+roles, or permissions granted one by one (nothing needs them, and a table this
+short can be verified in full); limiting an observer to particular stations (a
+separate feature with its own effect on the data model).
+
 ---
 
 ## IV. Spec-driven development
@@ -430,13 +458,22 @@ What Warden does not do and does not promise:
   station whose window was never requested appears empty however much happened
   on it, and overlapping requests can store the same event twice, since events
   are not deduplicated on ingestion;
-* **sessions can be ended only all at once, and only by their owner** — a
-  password change or an explicit "end all sessions" ends every session of that
-  operator (D-9), but one session cannot be listed or ended alone, and a stolen
-  token keeps working until one of those happens or it expires (8 hours by
-  default). Nothing detects a theft; ending sessions is the operator's response
-  to a suspicion. A session issued before that mechanism existed carries no
-  version and is refused once after the upgrade;
+* **sessions can be ended only all at once** — a password change, an explicit
+  "end all sessions", or an administrator disabling the account or resetting its
+  password ends every session of that operator (D-9), but one session cannot be
+  listed or ended alone, and a stolen token keeps working until one of those
+  happens or it expires (8 hours by default). Nothing detects a theft; ending
+  sessions is the response to a suspicion. A session issued before that
+  mechanism existed carries no version and is refused once after the upgrade;
+* **an observer sees everything the complex has collected** — the role removes
+  the ability to act and to read the audit log, not the ability to read stations'
+  data, and there is no scoping to particular stations (D-10);
+* **an initial or reset password is known to the administrator who set it** until
+  the person changes it, and nothing forces the change;
+* **two administrators acting on each other at the same instant can leave none
+  active** — the rule that nobody changes their own account guarantees a
+  remaining administrator only while actions are sequential; repairing that race
+  needs direct access to the database;
 * **the audit log is not a complete record** — it records actions that change
   something or authenticate someone. Reads (reports, station lists, the log
   itself) are not recorded, and neither are the requests a disabled station's
@@ -488,3 +525,4 @@ What Warden does not do and does not promise:
 | 1.0.2 | 2026-09-20 | PATCH: Section V gained two boundaries surfaced while planning the panel's reports and settings (`specs/002-panel-reports-and-settings/`): the cross-station report shows only events delivered through window requests (and can show duplicates, since ingestion does not deduplicate), and a password change does not end sessions already issued. No principle or decision changed |
 | 1.0.3 | 2026-09-24 | PATCH: Section V gained two boundaries surfaced while planning the audit log viewer (`specs/003-audit-log-viewer/`): the log records changes and sign-ins, not reads or a disabled station's rejected requests, and it is append-only only by server code, not enforced by the database. No principle or decision changed |
 | 1.1.0 | 2026-09-24 | MINOR: added decision D-9 (sessions are stateless tokens carrying a per-operator version, so a password change or an explicit request ends them) and rewrote the Section V boundary that said a password change does not end sessions, which no longer holds; what remains true is that sessions can only be ended all at once and only by their owner. See `specs/004-session-revocation/` |
+| 1.2.0 | 2026-09-24 | MINOR: added decision D-10 (two roles, an administrator and an observer, enforced by the server on every request with the role read from the database and not carried in the token; accounts are disabled, never deleted) and three Section V boundaries that come with it: an observer sees everything collected, an initial or reset password is known to the administrator who set it, and two administrators acting on each other at once can leave none active. The Section V sessions boundary was widened to say an administrator can also end an operator's sessions. See `specs/005-operator-management/` |
