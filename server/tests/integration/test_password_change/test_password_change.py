@@ -1,7 +1,9 @@
 """Integration: an operator changes their own password.
 
 Covers `specs/002-panel-reports-and-settings/spec.md` R-5, R-6, R-10 and
-acceptance criteria A-4, A-5, A-6 against the real HTTP endpoints.
+acceptance criteria A-4, A-5, A-6 against the real HTTP endpoints. What a
+change does to other sessions is covered in `test_session_revocation/`
+(spec 004).
 """
 
 import pytest
@@ -74,7 +76,7 @@ def test_the_new_password_logs_in_and_the_old_one_no_longer_does(
 ):
     response = _change(client, auth_headers, operator_password)
 
-    assert response.status_code == 204
+    assert response.status_code == 200
     assert _login(client, NEW_PASSWORD).status_code == 200
     assert _login(client, operator_password).status_code == 401
 
@@ -89,15 +91,6 @@ def test_a_successful_change_is_audited_under_the_operator(
     ).scalar_one()
     assert row.actor == "admin"
     assert row.target == "admin"
-
-
-def test_an_already_issued_session_keeps_working_after_the_change(
-    client, auth_headers, operator_password
-):
-    """Documents the boundary from the spec: no session revocation."""
-    _change(client, auth_headers, operator_password)
-
-    assert client.get("/api/v1/agents", headers=auth_headers).status_code == 200
 
 
 def test_the_seed_bootstrap_does_not_restore_the_old_password(

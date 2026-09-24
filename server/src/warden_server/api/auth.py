@@ -1,7 +1,7 @@
-"""Operator login and password change."""
+"""Operator login, password change, and ending sessions."""
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from warden_server.api.deps import require_operator
@@ -13,6 +13,21 @@ from warden_server.services import throttle
 from warden_server.services.audit import log_event
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
+
+def _end_sessions(db: Session, operator: Operator) -> None:
+    """Raise the operator's `token_version`, ending every session issued so far.
+
+    One SQL statement with the increment inside it, not a read-modify-write in
+    Python: two requests racing here cannot both write the same value and so
+    drop a revocation. The caller commits, and refreshes `operator` if it needs
+    the new value (D-9).
+    """
+    db.execute(
+        update(Operator)
+        .where(Operator.id == operator.id)
+        .values(token_version=Operator.token_version + 1)
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -56,21 +71,25 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         db, actor=operator.username, action="operator.login", target=operator.username
     )
     db.commit()
-    return TokenResponse(access_token=create_access_token(operator.username))
+    return TokenResponse(
+        access_token=create_access_token(operator.username, operator.token_version)
+    )
 
 
-@router.post("/password", status_code=204, response_class=Response)
+@router.post("/password", response_model=TokenResponse)
 def change_password(
     payload: PasswordChangeIn,
     operator: Operator = Depends(require_operator),
     db: Session = Depends(get_db),
-) -> Response:
+) -> TokenResponse:
     """Change the signed-in operator's own password.
 
-    Already-issued session tokens are stateless JWTs and keep working until
-    they expire; nothing here revokes them. Failed attempts are throttled
-    under a key of their own, so a holder of a stolen token cannot use this
-    endpoint to lock the operator out of login.
+    A successful change ends every session issued so far and returns a token
+    for the new version, so the session that made the change carries on while
+    all the others are refused on their next request. A failed attempt ends
+    nothing. Failed attempts are throttled under a key of their own, so a
+    holder of a stolen token cannot use this endpoint to lock the operator out
+    of login.
     """
     throttle_key = f"password-change:{operator.username}"
     if throttle.is_throttled(throttle_key):
@@ -86,7 +105,7 @@ def change_password(
             detail="Too many failed attempts, try again later",
         )
 
-    # A 400, not a 401: a 401 would read to the panel as an expired session.
+    # A 400, not a 401: a 401 would read to the panel as an ended session.
     if not verify_password(payload.current_password, operator.password_hash):
         log_event(
             db,
@@ -102,11 +121,32 @@ def change_password(
         )
 
     operator.password_hash = hash_password(payload.new_password)
+    _end_sessions(db, operator)
     throttle.reset(throttle_key)
     log_event(
         db,
         actor=operator.username,
         action="operator.password_change",
+        target=operator.username,
+    )
+    db.commit()
+    db.refresh(operator)
+    return TokenResponse(
+        access_token=create_access_token(operator.username, operator.token_version)
+    )
+
+
+@router.post("/logout-all", status_code=204, response_class=Response)
+def logout_all(
+    operator: Operator = Depends(require_operator),
+    db: Session = Depends(get_db),
+) -> Response:
+    """End every session of the signed-in operator, this one included."""
+    _end_sessions(db, operator)
+    log_event(
+        db,
+        actor=operator.username,
+        action="operator.sessions_revoked",
         target=operator.username,
     )
     db.commit()

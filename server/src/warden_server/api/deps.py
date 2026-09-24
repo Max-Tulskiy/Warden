@@ -45,18 +45,25 @@ def require_operator(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     db: Session = Depends(get_db),
 ) -> Operator:
-    """Authenticate an operator-facing (panel) request by a JWT bearer token."""
+    """Authenticate an operator-facing (panel) request by a JWT bearer token.
+
+    The token must be valid, name a known operator, and carry that operator's
+    current `token_version`.
+    """
     unauthorized = HTTPException(
         status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing credentials"
     )
     if credentials is None:
         raise unauthorized
-    username = decode_access_token(credentials.credentials)
-    if username is None:
+    claims = decode_access_token(credentials.credentials)
+    if claims is None:
         raise unauthorized
     operator = db.execute(
-        select(Operator).where(Operator.username == username)
+        select(Operator).where(Operator.username == claims.subject)
     ).scalar_one_or_none()
-    if operator is None:
+    # A session ends when its operator's version moves past the one it was
+    # issued at. The same 401 as any other refusal: an ended session must not
+    # be distinguishable from an invalid one.
+    if operator is None or claims.version != operator.token_version:
         raise unauthorized
     return operator

@@ -69,11 +69,12 @@ def enrollment_token(server_db) -> str:
 
 @pytest.fixture
 def operator_bearer_token(server_db) -> str:
-    server_db.add(
-        Operator(username="admin", password_hash=hash_password("s3cret-pass"))
-    )
+    operator = Operator(username="admin", password_hash=hash_password("s3cret-pass"))
+    server_db.add(operator)
     server_db.commit()
-    return create_access_token("admin")
+    # A session token carries the operator's version; the server refuses one
+    # that does not match it.
+    return create_access_token(operator.username, operator.token_version)
 
 
 @pytest.fixture

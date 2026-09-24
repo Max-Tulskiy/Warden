@@ -16,7 +16,7 @@ import hashlib
 import hmac
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 import jwt
 from argon2 import PasswordHasher
@@ -51,15 +51,33 @@ def verify_secret_token(token: str, token_hash: str) -> bool:
     return hmac.compare_digest(hash_secret_token(token), token_hash)
 
 
-def create_access_token(subject: str) -> str:
+class TokenClaims(NamedTuple):
+    """What a valid session token asserts: whose it is, and which version."""
+
+    subject: str
+    version: int
+
+
+def create_access_token(subject: str, version: int) -> str:
+    """Issue a session token for `subject` at the operator's current version.
+
+    `version` is required, so a caller that mints a token cannot forget it: a
+    token is refused once its operator's version has moved on (D-9), which is
+    how a session is ended before it expires.
+    """
     settings = get_settings()
     expires_at = datetime.now(UTC) + timedelta(minutes=settings.jwt_expire_minutes)
-    payload: dict[str, Any] = {"sub": subject, "exp": expires_at}
+    payload: dict[str, Any] = {"sub": subject, "ver": version, "exp": expires_at}
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def decode_access_token(token: str) -> str | None:
-    """Return the token's subject, or None if it is missing/invalid/expired."""
+def decode_access_token(token: str) -> TokenClaims | None:
+    """Return the token's claims, or None if it is missing/invalid/expired.
+
+    A token without an integer `ver` is invalid too. That covers a session
+    issued before versions existed, which is refused once after the upgrade.
+    A boolean is rejected explicitly because it is an `int` in Python.
+    """
     settings = get_settings()
     try:
         payload = jwt.decode(
@@ -67,4 +85,10 @@ def decode_access_token(token: str) -> str | None:
         )
     except jwt.PyJWTError:
         return None
-    return payload.get("sub")
+    subject = payload.get("sub")
+    version = payload.get("ver")
+    if not isinstance(subject, str):
+        return None
+    if isinstance(version, bool) or not isinstance(version, int):
+        return None
+    return TokenClaims(subject=subject, version=version)
