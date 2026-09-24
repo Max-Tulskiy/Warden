@@ -88,7 +88,8 @@ def test_downgrading_removes_both_columns_and_keeps_the_operator(database):
     _insert_legacy_operator(database)
     command.upgrade(_alembic(), "head")
 
-    command.downgrade(_alembic(), "-1")
+    # To the revision before the roles, not `-1`: later revisions sit above them.
+    command.downgrade(_alembic(), BEFORE_ROLES)
 
     columns = _columns(database, "operators")
     assert "role" not in columns and "status" not in columns
