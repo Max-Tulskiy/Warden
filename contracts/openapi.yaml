@@ -535,6 +535,98 @@ paths:
                 $ref: '#/components/schemas/PolicyOut'
       security:
       - HTTPBearer: []
+  /api/v1/audit:
+    get:
+      tags:
+      - audit
+      summary: Audit Log
+      description: 'Audit entries for a time range, newest first.
+
+
+        The range is half-open, `[start, end)`, like the fleet report. `id` breaks
+
+        ties so offset paging stays stable when several entries share a timestamp.
+
+        Reading the log is not itself recorded in it, like every other read.
+
+
+        `action` is either one code or a dotted group: `operator.login` matches
+
+        only itself, `operator` matches every `operator.*`. A plain string prefix
+
+        would let `operator.login` also return `operator.login_failed`.'
+      operationId: audit_log_api_v1_audit_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: start
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          title: Start
+      - name: end
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          title: End
+      - name: actor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 255
+          - type: 'null'
+          title: Actor
+      - name: action
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 64
+            pattern: ^[a-z0-9_.]+$
+          - type: 'null'
+          title: Action
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 2000
+          minimum: 1
+          default: 500
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEntryOut'
+                title: Response Audit Log Api V1 Audit Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       tags:
@@ -601,6 +693,46 @@ components:
       - status
       title: AgentStatusIn
       description: 'The body of `PATCH /api/v1/agents/{id}`: enable or disable a station.'
+    AuditEntryOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        actor:
+          type: string
+          title: Actor
+        action:
+          type: string
+          title: Action
+        target:
+          type: string
+          title: Target
+        occurred_at:
+          type: string
+          format: date-time
+          title: Occurred At
+        detail:
+          additionalProperties: true
+          type: object
+          title: Detail
+      type: object
+      required:
+      - id
+      - actor
+      - action
+      - target
+      - occurred_at
+      - detail
+      title: AuditEntryOut
+      description: 'One audit log row.
+
+
+        `action` stays a plain string on purpose: a row written by an older or a
+
+        newer server must still be readable, so the set of codes is not enforced
+
+        on the way out.'
     EnrollRequest:
       properties:
         token:
