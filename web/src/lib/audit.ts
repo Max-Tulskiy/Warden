@@ -23,6 +23,11 @@ const ACTION_LABELS: Record<string, string> = {
   "operator.password_change_failed": "Неудачная смена пароля",
   "operator.password_change_throttled": "Смена пароля заблокирована: слишком много попыток",
   "operator.sessions_revoked": "Завершены все сеансы оператора",
+  "operator.created": "Создан оператор",
+  "operator.role_changed": "Изменена роль оператора",
+  "operator.disabled": "Оператор отключён",
+  "operator.enabled": "Оператор включён",
+  "operator.password_reset": "Сброшен пароль оператора",
   "request.window": "Запрос окна данных у станции",
 };
 
