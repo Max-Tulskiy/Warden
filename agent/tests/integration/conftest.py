@@ -18,7 +18,7 @@ from sqlalchemy.pool import StaticPool
 from warden_server.db import Base, get_db
 from warden_server.main import app
 from warden_server.models.enrollment import EnrollmentToken
-from warden_server.models.operator import Operator
+from warden_server.models.operator import Operator, OperatorRole
 from warden_server.security import (
     create_access_token,
     generate_secret_token,
@@ -69,7 +69,11 @@ def enrollment_token(server_db) -> str:
 
 @pytest.fixture
 def operator_bearer_token(server_db) -> str:
-    operator = Operator(username="admin", password_hash=hash_password("s3cret-pass"))
+    operator = Operator(
+        username="admin",
+        password_hash=hash_password("s3cret-pass"),
+        role=OperatorRole.ADMIN,
+    )
     server_db.add(operator)
     server_db.commit()
     # A session token carries the operator's version; the server refuses one

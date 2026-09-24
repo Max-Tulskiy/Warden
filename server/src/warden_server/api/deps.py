@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from warden_server.db import get_db
 from warden_server.models.agent import Agent, AgentStatus
-from warden_server.models.operator import Operator
+from warden_server.models.operator import Operator, OperatorRole, OperatorStatus
 from warden_server.security import decode_access_token, verify_secret_token
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -47,8 +47,8 @@ def require_operator(
 ) -> Operator:
     """Authenticate an operator-facing (panel) request by a JWT bearer token.
 
-    The token must be valid, name a known operator, and carry that operator's
-    current `token_version`.
+    The token must be valid, name a known, active operator, and carry that
+    operator's current `token_version`.
     """
     unauthorized = HTTPException(
         status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing credentials"
@@ -62,8 +62,34 @@ def require_operator(
         select(Operator).where(Operator.username == claims.subject)
     ).scalar_one_or_none()
     # A session ends when its operator's version moves past the one it was
-    # issued at. The same 401 as any other refusal: an ended session must not
-    # be distinguishable from an invalid one.
-    if operator is None or claims.version != operator.token_version:
+    # issued at, or when the account is disabled. The same 401 as any other
+    # refusal: an ended session must not be distinguishable from an invalid one.
+    if (
+        operator is None
+        or operator.status != OperatorStatus.ACTIVE
+        or claims.version != operator.token_version
+    ):
         raise unauthorized
+    return operator
+
+
+#: The response an administrator-only operation adds to the contract. FastAPI
+#: cannot derive it from the dependency, and a caller reading the contract
+#: needs to learn that an observer is refused (principle 11).
+ADMIN_ONLY_RESPONSES: dict[int | str, dict[str, str]] = {
+    status.HTTP_403_FORBIDDEN: {"description": "Administrator role required"}
+}
+
+
+def require_admin(operator: Operator = Depends(require_operator)) -> Operator:
+    """Allow only an administrator, on top of a valid session.
+
+    A 403, not a 401: the session is fine and the person is not signed out; the
+    panel can tell them they lack the role. The role is read from the row on
+    every request, so a change applies to the person's next action (D-10).
+    """
+    if operator.role != OperatorRole.ADMIN:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, detail="Administrator role required"
+        )
     return operator

@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, Field, model_validator
 
+from warden_server.models.operator import OperatorRole
+
 #: Minimum length of a new operator password. A module constant rather than a
 #: setting, like the upload limits: it is a fixed policy the panel reads back
 #: through `GET /api/v1/policy`, not a per-deployment tuning knob.
@@ -38,3 +40,10 @@ class PasswordChangeIn(BaseModel):
         if self.new_password == self.current_password:
             raise ValueError("the new password must differ from the current one")
         return self
+
+
+class MeOut(BaseModel):
+    """Who the signed-in operator is and what they may do."""
+
+    username: str
+    role: OperatorRole

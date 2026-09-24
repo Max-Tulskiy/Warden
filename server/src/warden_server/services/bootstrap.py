@@ -3,7 +3,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from warden_server.models.operator import Operator
+from warden_server.models.operator import Operator, OperatorRole
 from warden_server.security import hash_password
 
 
@@ -18,4 +18,10 @@ def ensure_seed_operator(db: Session, *, username: str, password: str) -> None:
     existing = db.execute(select(Operator).limit(1)).scalar_one_or_none()
     if existing is not None:
         return
-    db.add(Operator(username=username, password_hash=hash_password(password)))
+    db.add(
+        Operator(
+            username=username,
+            password_hash=hash_password(password),
+            role=OperatorRole.ADMIN,
+        )
+    )

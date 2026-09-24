@@ -15,7 +15,7 @@ from sqlalchemy import update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
-from warden_server.api.deps import require_agent, require_operator
+from warden_server.api.deps import ADMIN_ONLY_RESPONSES, require_admin, require_agent
 from warden_server.config import get_settings
 from warden_server.db import get_db
 from warden_server.models.agent import Agent, AgentStatus
@@ -40,9 +40,14 @@ from warden_server.services.inventory import ingest_snapshot
 router = APIRouter(prefix="/api/v1", tags=["agents"])
 
 
-@router.post("/enrollment-tokens", response_model=EnrollmentTokenOut, status_code=201)
+@router.post(
+    "/enrollment-tokens",
+    response_model=EnrollmentTokenOut,
+    status_code=201,
+    responses=ADMIN_ONLY_RESPONSES,
+)
 def create_enrollment_token(
-    operator: Operator = Depends(require_operator), db: Session = Depends(get_db)
+    operator: Operator = Depends(require_admin), db: Session = Depends(get_db)
 ) -> EnrollmentTokenOut:
     """Issue a one-time token an administrator hands to a new agent."""
     settings = get_settings()
@@ -118,11 +123,13 @@ def enroll(payload: EnrollRequest, db: Session = Depends(get_db)) -> EnrollRespo
     return EnrollResponse(agent_id=agent.id, agent_key=agent_key)
 
 
-@router.patch("/agents/{agent_id}", response_model=AgentOut)
+@router.patch(
+    "/agents/{agent_id}", response_model=AgentOut, responses=ADMIN_ONLY_RESPONSES
+)
 def set_agent_status(
     agent_id: uuid.UUID,
     payload: AgentStatusIn,
-    operator: Operator = Depends(require_operator),
+    operator: Operator = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> Agent:
     """Enable or disable a station.

@@ -6,13 +6,16 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from warden_server.api.deps import require_operator
+from warden_server.api.deps import ADMIN_ONLY_RESPONSES, require_admin
 from warden_server.db import get_db
 from warden_server.models.audit import AuditLogEntry
 from warden_server.schemas.audit import AuditEntryOut, AuditFilter
 
 router = APIRouter(
-    prefix="/api/v1", tags=["audit"], dependencies=[Depends(require_operator)]
+    prefix="/api/v1",
+    tags=["audit"],
+    dependencies=[Depends(require_admin)],
+    responses=ADMIN_ONLY_RESPONSES,
 )
 
 

@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from warden_server.api.deps import require_operator
+from warden_server.api.deps import ADMIN_ONLY_RESPONSES, require_admin
 from warden_server.db import get_db
 from warden_server.models.agent import Agent
 from warden_server.models.operator import Operator
@@ -16,11 +16,16 @@ from warden_server.services.tasks import place_window_request
 router = APIRouter(prefix="/api/v1", tags=["requests"])
 
 
-@router.post("/agents/{agent_id}/requests", response_model=TaskOut, status_code=201)
+@router.post(
+    "/agents/{agent_id}/requests",
+    response_model=TaskOut,
+    status_code=201,
+    responses=ADMIN_ONLY_RESPONSES,
+)
 def create_window_request(
     agent_id: uuid.UUID,
     payload: WindowRequestIn,
-    operator: Operator = Depends(require_operator),
+    operator: Operator = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """Place a request for a station's data over a bounded time window.

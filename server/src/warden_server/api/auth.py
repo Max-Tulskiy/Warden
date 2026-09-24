@@ -1,33 +1,24 @@
 """Operator login, password change, and ending sessions."""
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from warden_server.api.deps import require_operator
 from warden_server.db import get_db
-from warden_server.models.operator import Operator
-from warden_server.schemas.auth import LoginRequest, PasswordChangeIn, TokenResponse
+from warden_server.models.operator import Operator, OperatorStatus
+from warden_server.schemas.auth import (
+    LoginRequest,
+    MeOut,
+    PasswordChangeIn,
+    TokenResponse,
+)
 from warden_server.security import create_access_token, hash_password, verify_password
 from warden_server.services import throttle
 from warden_server.services.audit import log_event
+from warden_server.services.sessions import end_sessions
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
-
-
-def _end_sessions(db: Session, operator: Operator) -> None:
-    """Raise the operator's `token_version`, ending every session issued so far.
-
-    One SQL statement with the increment inside it, not a read-modify-write in
-    Python: two requests racing here cannot both write the same value and so
-    drop a revocation. The caller commits, and refreshes `operator` if it needs
-    the new value (D-9).
-    """
-    db.execute(
-        update(Operator)
-        .where(Operator.id == operator.id)
-        .values(token_version=Operator.token_version + 1)
-    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -52,15 +43,24 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     invalid_credentials = HTTPException(
         status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password"
     )
-    if operator is None or not verify_password(
+    password_ok = operator is not None and verify_password(
         payload.password, operator.password_hash
-    ):
+    )
+    # The password is checked first, so a wrong password on a disabled account
+    # still reads as a wrong password; only the log tells a disabled account.
+    if operator is None or not password_ok or operator.status != OperatorStatus.ACTIVE:
+        if operator is None:
+            reason = "unknown_user"
+        elif not password_ok:
+            reason = "bad_password"
+        else:
+            reason = "disabled"
         log_event(
             db,
             actor=payload.username,
             action="operator.login_failed",
             target=payload.username,
-            detail={"reason": "unknown_user" if operator is None else "bad_password"},
+            detail={"reason": reason},
         )
         db.commit()
         throttle.record_failure(payload.username)
@@ -74,6 +74,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     return TokenResponse(
         access_token=create_access_token(operator.username, operator.token_version)
     )
+
+
+@router.get("/me", response_model=MeOut)
+def me(operator: Operator = Depends(require_operator)) -> MeOut:
+    """Who is signed in and what they may do; the panel shapes itself by it."""
+    return MeOut(username=operator.username, role=operator.role)
 
 
 @router.post("/password", response_model=TokenResponse)
@@ -121,7 +127,7 @@ def change_password(
         )
 
     operator.password_hash = hash_password(payload.new_password)
-    _end_sessions(db, operator)
+    end_sessions(db, operator)
     throttle.reset(throttle_key)
     log_event(
         db,
@@ -142,7 +148,7 @@ def logout_all(
     db: Session = Depends(get_db),
 ) -> Response:
     """End every session of the signed-in operator, this one included."""
-    _end_sessions(db, operator)
+    end_sessions(db, operator)
     log_event(
         db,
         actor=operator.username,

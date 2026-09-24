@@ -19,7 +19,7 @@ from sqlalchemy.pool import StaticPool
 from warden_server.db import Base, get_db
 from warden_server.main import app
 from warden_server.models.enrollment import EnrollmentToken
-from warden_server.models.operator import Operator
+from warden_server.models.operator import Operator, OperatorRole
 from warden_server.security import (
     generate_secret_token,
     hash_password,
@@ -64,7 +64,11 @@ def operator_password() -> str:
 
 @pytest.fixture
 def operator(db_session: Session, operator_password: str) -> Operator:
-    op = Operator(username="admin", password_hash=hash_password(operator_password))
+    op = Operator(
+        username="admin",
+        password_hash=hash_password(operator_password),
+        role=OperatorRole.ADMIN,
+    )
     db_session.add(op)
     db_session.commit()
     return op
@@ -114,3 +118,33 @@ def enrolled_agent(client: TestClient, enrollment_token: str) -> dict[str, str]:
 @pytest.fixture
 def agent_headers(enrolled_agent: dict[str, str]) -> dict[str, str]:
     return {"X-Agent-Key": enrolled_agent["agent_key"]}
+
+
+@pytest.fixture
+def viewer_password() -> str:
+    return "observer-secret-passphrase"
+
+
+@pytest.fixture
+def viewer(db_session: Session, viewer_password: str) -> Operator:
+    """An observer: may look at what was collected, but not act on it."""
+    account = Operator(
+        username="watcher",
+        password_hash=hash_password(viewer_password),
+        role=OperatorRole.VIEWER,
+    )
+    db_session.add(account)
+    db_session.commit()
+    return account
+
+
+@pytest.fixture
+def viewer_headers(
+    client: TestClient, viewer: Operator, viewer_password: str
+) -> dict[str, str]:
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": viewer.username, "password": viewer_password},
+    )
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
