@@ -7,6 +7,7 @@ import {
   getFleetEvents,
   getInventoryChanges,
   getPolicy,
+  listAudit,
   setAgentStatus,
 } from "../../src/api/client";
 
@@ -50,6 +51,64 @@ describe("getFleetEvents", () => {
     expect(url.searchParams.get("category")).toBe("printing");
     expect(url.searchParams.get("limit")).toBe("500");
     expect(url.searchParams.get("offset")).toBe("1000");
+  });
+});
+
+describe("listAudit", () => {
+  const range = { start: "2026-09-01T12:00:00.000Z", end: "2026-09-01T13:00:00.000Z" };
+
+  it("sends the range and the bearer token to /audit", async () => {
+    const fetchMock = mockFetch(new Response(JSON.stringify([]), { status: 200 }));
+
+    await listAudit("operator-token", range);
+
+    const [input, init] = fetchMock.mock.calls[0];
+    const url = new URL(input.toString(), "http://x");
+    expect(url.pathname).toBe("/api/v1/audit");
+    expect(url.searchParams.get("start")).toBe(range.start);
+    expect(url.searchParams.get("end")).toBe(range.end);
+    expect(init?.headers).toMatchObject({ Authorization: "Bearer operator-token" });
+  });
+
+  it("omits actor, action and paging when they are not set", async () => {
+    const fetchMock = mockFetch(new Response(JSON.stringify([]), { status: 200 }));
+
+    await listAudit("token", range);
+
+    const url = new URL(fetchMock.mock.calls[0][0].toString(), "http://x");
+    expect(url.searchParams.has("actor")).toBe(false);
+    expect(url.searchParams.has("action")).toBe(false);
+    expect(url.searchParams.has("limit")).toBe(false);
+    expect(url.searchParams.has("offset")).toBe(false);
+  });
+
+  it("passes actor, action and paging through", async () => {
+    const fetchMock = mockFetch(new Response(JSON.stringify([]), { status: 200 }));
+
+    await listAudit(
+      "token",
+      { ...range, actor: "admin", action: "operator.login" },
+      { limit: 500, offset: 1000 },
+    );
+
+    const url = new URL(fetchMock.mock.calls[0][0].toString(), "http://x");
+    expect(url.searchParams.get("actor")).toBe("admin");
+    expect(url.searchParams.get("action")).toBe("operator.login");
+    expect(url.searchParams.get("limit")).toBe("500");
+    expect(url.searchParams.get("offset")).toBe("1000");
+  });
+
+  it("surfaces an expired session as an ApiError carrying the status", async () => {
+    mockFetch(
+      new Response(JSON.stringify({ detail: "Invalid or missing credentials" }), {
+        status: 401,
+      }),
+    );
+
+    await expect(listAudit("token", range)).rejects.toMatchObject({
+      name: "Error",
+      status: 401,
+    });
   });
 });
 

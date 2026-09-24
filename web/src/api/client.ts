@@ -1,5 +1,6 @@
 import type {
   Agent,
+  AuditEntry,
   EnrollmentToken,
   EventRecord,
   FleetEvent,
@@ -113,6 +114,28 @@ export function getFleetEvents(
   if (page.limit !== undefined) params.set("limit", String(page.limit));
   if (page.offset !== undefined) params.set("offset", String(page.offset));
   return request<FleetEvent[]>(`/events?${params}`, { token });
+}
+
+export interface AuditFilters {
+  start: string;
+  end: string;
+  /** An operator username, a station id, or a hostname; matched exactly. */
+  actor?: string;
+  /** One action code, or a dotted group such as `operator`. */
+  action?: string;
+}
+
+export function listAudit(
+  token: string,
+  filters: AuditFilters,
+  page: PageParams = {},
+): Promise<AuditEntry[]> {
+  const params = new URLSearchParams({ start: filters.start, end: filters.end });
+  if (filters.actor) params.set("actor", filters.actor);
+  if (filters.action) params.set("action", filters.action);
+  if (page.limit !== undefined) params.set("limit", String(page.limit));
+  if (page.offset !== undefined) params.set("offset", String(page.offset));
+  return request<AuditEntry[]>(`/audit?${params}`, { token });
 }
 
 export function getPolicy(token: string): Promise<Policy> {

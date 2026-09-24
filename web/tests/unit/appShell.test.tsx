@@ -35,10 +35,18 @@ describe("AppShell navigation", () => {
       "href",
       "/reports",
     );
+    expect(screen.getByRole("link", { name: "Журнал" })).toHaveAttribute("href", "/audit");
     expect(screen.getByRole("link", { name: "Настройки" })).toHaveAttribute(
       "href",
       "/settings",
     );
+  });
+
+  it("lists the sections in order, with the log before the settings", () => {
+    renderShellAt("/agents");
+
+    const names = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(names).toEqual(["Станции", "Отчёты", "Журнал", "Настройки"]);
   });
 
   it("keeps Stations active on a station's detail page", () => {
@@ -63,5 +71,20 @@ describe("AppShell navigation", () => {
     expect(isActive("Настройки")).toBe(true);
     expect(isActive("Станции")).toBe(false);
     expect(isActive("Отчёты")).toBe(false);
+  });
+
+  it("marks Журнал active on /audit only", () => {
+    renderShellAt("/audit");
+
+    expect(isActive("Журнал")).toBe(true);
+    expect(isActive("Станции")).toBe(false);
+    expect(isActive("Отчёты")).toBe(false);
+    expect(isActive("Настройки")).toBe(false);
+  });
+
+  it("leaves Журнал inactive on the other screens", () => {
+    renderShellAt("/reports");
+
+    expect(isActive("Журнал")).toBe(false);
   });
 });

@@ -2,7 +2,14 @@ import type { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../state/authContext";
-import { LogoutIcon, ReportsIcon, SettingsIcon, ShieldIcon, StationsIcon } from "./icons";
+import {
+  AuditIcon,
+  LogoutIcon,
+  ReportsIcon,
+  SettingsIcon,
+  ShieldIcon,
+  StationsIcon,
+} from "./icons";
 
 function operatorInitials(username: string): string {
   return username.slice(0, 2).toUpperCase();
@@ -54,6 +61,10 @@ export function AppShell({ children, narrow }: { children: ReactNode; narrow?: b
           <NavLink to="/reports" className={navClassName}>
             <ReportsIcon />
             Отчёты
+          </NavLink>
+          <NavLink to="/audit" className={navClassName}>
+            <AuditIcon />
+            Журнал
           </NavLink>
           <NavLink to="/settings" className={navClassName}>
             <SettingsIcon />

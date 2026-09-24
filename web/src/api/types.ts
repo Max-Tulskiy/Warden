@@ -45,6 +45,16 @@ export interface Policy {
   max_page_size: number;
 }
 
+export interface AuditEntry {
+  id: string;
+  actor: string;
+  /** Kept a plain string: a row from another server version may carry an unknown code. */
+  action: string;
+  target: string;
+  occurred_at: string;
+  detail: Record<string, unknown>;
+}
+
 export interface InventoryChange {
   id: string;
   detected_at: string;
