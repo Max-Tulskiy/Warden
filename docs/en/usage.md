@@ -96,6 +96,26 @@ The log records changes and sign-ins, but not reads and not the rejections a
 disabled station receives, and anyone with database access can alter its
 entries -- the hint under the filters says the same.
 
+**Operators and roles.** Every account has one of two roles. An **administrator**
+can do everything: request data from stations, issue enrollment tokens, enable and
+disable stations, read the audit log, and manage accounts. An **observer** sees
+stations, reports, inventory changes, and the server policy, changes their own
+password and ends their own sessions, but does nothing to stations, does not read
+the log, and does not manage accounts; those sections and buttons are absent from
+an observer's panel, and a direct request is refused by the server (403). The
+"Операторы" (Operators) section, for administrators only, lists every account with
+its role and status and lets you create an account (a name of Latin letters,
+digits, and `. _ @ -`, a role, and an initial password), change a role, disable and
+enable an account, and reset a password. Disabling and a password reset end that
+account's sessions, and a role change applies to the person's very next action.
+Your own account cannot be changed, so an administrator cannot disable or demote
+themselves; accounts are never deleted, only disabled. An initial or reset
+password is known to the administrator who set it until the person changes it in
+"Настройки" (Settings), so ask them to change it at first sign-in. The account from
+`WARDEN_SEED_ADMIN_*` is the first administrator: create personal accounts from it
+and, once they exist, remove its password from `.env`. An observer sees all the
+collected data of all stations -- they cannot be limited to particular stations.
+
 ## Installing the agent
 
 ### Windows 10/11 (`.msi`)
@@ -238,6 +258,42 @@ and applied again on PostgreSQL, and an operator created before it read version
 counter lives in the database, so it should hold, but there was one process);
 simultaneous password changes under load were not tested, and a single SQL
 statement is the guarantee; and there was only one browser -- Chromium.
+
+Roles and account management were walked through by hand on a real stack (`docker
+compose`: Caddy + PostgreSQL 16, a separate project with fresh volumes, the proxy on
+non-standard ports): through the proxy, and in two independent Chromium contexts
+driven by Playwright that stand for an administrator and an observer at the same
+time. Through the proxy: an administrator creates an observer, who signs in, and
+`/auth/me` names the roles; the observer gets 200 on stations, the policy, and a
+report, and 403 (`Administrator role required`) on issuing a token, disabling a
+station, requesting a window, the audit log, and all four account operations,
+while without a token every one of them gives 401; a promotion and a demotion apply
+to the same token from the next request, and a demoted session still works for an
+observer's actions; a case-variant duplicate name is 409, and a bad name, a short
+password, and an unknown role are 422; disabling ends the session and closes
+sign-in with the same response as a wrong password, and enabling does not bring
+the session back; a password reset replaces the password and ends the sessions;
+changing one's own role, status, and password is 409; one administrator disables
+another and the other is refused, while the last administrator cannot disable
+themselves; the audit log holds all five new actions, a role change records "from"
+and "to", a sign-in on a disabled account is marked with the reason `disabled`, and
+no password or token is in the log. In the browser: an observer has no "Журнал" or
+"Операторы" item, no token-issuing button, and no "Станции" card in settings, and
+`/audit` and `/operators` opened by address show "Недостаточно прав для просмотра
+этого раздела" without signing them out; a direct request with their token gets
+403; an administrator creates an account through the form, promotes and demotes a
+role, disables with a confirmation and enables, and resets a password (a
+mismatched repeat is refused); when a role is lowered while an observer has the
+administrator panel open, their next action shows the same notice and the items
+disappear while the session stays; a disabled person's open browser shows the
+sign-in screen with "Сеанс завершён. Войдите снова."; and the audit screen shows the
+new actions under Russian names. The roles migration was applied, reverted, and
+applied again on PostgreSQL: an operator that existed before it became
+`ADMIN`/`ACTIVE`, `role` has no default, an insert without a role is refused, and
+`alembic check` is clean. What this does **not** prove: the race of two
+administrators disabling each other at the same instant (it is named as a boundary
+and was not reproduced); behavior with several server processes; and there was
+only one browser -- Chromium.
 
 This is not an oversight -- it follows directly from constitution principle
 10 ("honesty about boundaries"): naming the actual level of confidence beats

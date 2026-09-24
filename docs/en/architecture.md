@@ -62,7 +62,7 @@ connection is not workable in practice.
 | `events` | Category events (`removable_media`, `printing`, `processes`, `web`), tied to the task they answered |
 | `inventory_snapshots` | Full hardware/software snapshots, append-only, never overwritten |
 | `inventory_changes` | Separate records of detected changes (added/removed/modified) |
-| `operators` | Panel administrator accounts; `token_version` is the counter whose increase ends all of an operator's sessions |
+| `operators` | Panel accounts: a role (`role`: administrator or observer), a status (`status`: active or disabled), and `token_version`, the counter whose increase ends all of an operator's sessions |
 | `audit_log` | Every notable action: enrollment, task dispatch, login, configuration changes; read in the panel on the "Журнал" (audit log) screen |
 
 ### Configuration-change detector
@@ -205,6 +205,71 @@ session. A single session cannot be ended on its own -- only all of them.
 All external traffic runs over TLS, terminated at the Caddy reverse proxy
 (`docker-compose.yml`, `Caddyfile`), not by the application server itself.
 
+## Authorization and accounts
+
+An operator account has one of two roles (decision D-10 of the constitution).
+
+| What may be done | Observer | Administrator |
+|---|---|---|
+| Stations, reports, inventory changes, the server policy (read-only) | yes | yes |
+| Changing one's own password, ending one's own sessions, `GET /api/v1/auth/me` | yes | yes |
+| Requesting data from a station, issuing an enrollment token, disabling and enabling a station | no | yes |
+| The audit log | no | yes |
+| Managing accounts | no | yes |
+
+The server makes the check on every request: the `require_admin` dependency works
+on top of `require_operator`. The role is read from the operator's row, not from
+the token, so a change applies to the person's very next action, with no new
+sign-in and no session revocation. A refusal for lack of the role is a 403
+(`Administrator role required`), not a 401: the session is fine, and the panel
+can explain what is missing instead of throwing the person out to the sign-in
+screen. Hiding a control in the panel is a courtesy, not protection. Two tests
+keep this honest: one walks the OpenAPI schema and fails if any operation other
+than sign-in, agent enrollment, and `/health` can be reached without credentials;
+the other calls every operator operation with real administrator and observer
+tokens and compares the outcome with the table above. The contract describes a
+403 response on the administrator-only operations.
+
+**Accounts.** All operations are `/api/v1/operators...`, administrators only.
+
+- `GET` -- the list (`id`, `username`, `role`, `status`; no password hash).
+- `POST` -- creation: a username (Latin letters, digits, and `. _ @ -`, up to 64
+  characters, starting with a letter or digit), a role, and an initial password
+  (at least the policy's minimum). Usernames are unique ignoring letter case; a
+  repeat is a 409.
+- `PATCH /{id}` -- a role and/or a status. One's own account cannot be changed
+  (409): the calling administrator therefore always remains active, so the panel
+  cannot leave the deployment without an administrator. Setting the value that is
+  already there is a 200 with no audit entry. Disabling ends the account's
+  sessions (`token_version` is raised) and forbids sign-in; a role change does
+  not end sessions, because the role is read on every request.
+- `POST /{id}/password` -- another administrator's reset: the password is
+  replaced, the sessions end, and the account's login and password-change
+  throttles are cleared so a person who was locked out can sign in with the new
+  password. One's own password is not changed this way -- that is the form in
+  "Настройки" (Settings), which asks for the current password.
+
+Accounts are never deleted, only disabled: the names in the audit log should keep
+pointing at someone. The log records `operator.created`, `operator.role_changed`
+(from and to), `operator.disabled`, `operator.enabled`, and
+`operator.password_reset`; a sign-in attempt on a disabled account is
+`operator.login_failed` with the reason `disabled`. Neither passwords nor their
+hashes reach the log or any response. On upgrade every existing account becomes
+an administrator (the migration), so that nobody loses access; the `role` column
+has no default, so an account without a stated role cannot be created. The
+account from `WARDEN_SEED_ADMIN_*` is an administrator.
+
+**The panel.** The panel takes the role from `GET /api/v1/auth/me`. The navigation
+shows "Журнал" (audit log) and "Операторы" (operators) only to an administrator,
+and the role is shown beside the name. An observer has no token-issuing button, no
+window request form, and no "Станции" (stations) card in settings, and the
+`/audit` and `/operators` screens opened by address show "Недостаточно прав для
+просмотра этого раздела" (not enough rights to view this section). When the server
+answers 403 to a request that carried a token, the API client calls a handler, the
+panel reads the role again, and what is no longer allowed disappears for a person
+whose role was lowered while a screen was open. While the role is unknown, nothing
+that needs one is shown.
+
 ## Agent collectors
 
 Each event category has a platform backend selected at runtime
@@ -250,11 +315,22 @@ The full list is constitution Section V. The essentials:
 - repeated requests for overlapping windows store the same event twice --
   there is no deduplication on ingestion, so the report (like the daily one)
   can show duplicates;
-- only all of an operator's sessions can be ended at once, and only by the
-  operator: a single session can be neither seen nor ended alone, and a stolen
-  token works until the operator changes the password, ends all sessions, or the
-  token expires (8 hours by default). The server does not detect a theft. A
-  session issued before versions existed is refused once after the upgrade;
+- only all of an operator's sessions can be ended at once: the operator does it
+  by changing the password or with "Завершить все сеансы" (end all sessions), an
+  administrator by disabling the account or resetting its password. A single
+  session can be neither seen nor ended alone, and a stolen token works until one
+  of those happens or the token expires (8 hours by default). The server does not
+  detect a theft. A session issued before versions existed is refused once after
+  the upgrade;
+- an observer sees everything the complex has collected: the role removes the
+  ability to act and to read the audit log, not the ability to read stations'
+  data, and an observer cannot be limited to particular stations;
+- an initial or reset password is known to the administrator who set it until the
+  person changes it; nothing forces a change at first sign-in;
+- two administrators acting on each other at the same instant can leave the
+  system without an active administrator: the rule that nobody changes their own
+  account guarantees a remaining administrator only while actions are
+  sequential, and repairing that race needs direct access to the database;
 - the audit log is incomplete: it records changes and sign-ins, but not reads
   (reports, station lists, the log itself) and not the rejections a disabled
   station receives;
