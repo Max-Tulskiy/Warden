@@ -1,0 +1,55 @@
+"""Read endpoint for the audit log (constitution principle 8)."""
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session
+
+from warden_server.api.deps import require_operator
+from warden_server.db import get_db
+from warden_server.models.audit import AuditLogEntry
+from warden_server.schemas.audit import AuditEntryOut, AuditFilter
+
+router = APIRouter(
+    prefix="/api/v1", tags=["audit"], dependencies=[Depends(require_operator)]
+)
+
+
+@router.get("/audit", response_model=list[AuditEntryOut])
+def audit_log(
+    audit: Annotated[AuditFilter, Query()], db: Session = Depends(get_db)
+) -> list[AuditLogEntry]:
+    """Audit entries for a time range, newest first.
+
+    The range is half-open, `[start, end)`, like the fleet report. `id` breaks
+    ties so offset paging stays stable when several entries share a timestamp.
+    Reading the log is not itself recorded in it, like every other read.
+
+    `action` is either one code or a dotted group: `operator.login` matches
+    only itself, `operator` matches every `operator.*`. A plain string prefix
+    would let `operator.login` also return `operator.login_failed`.
+    """
+    query = select(AuditLogEntry).where(
+        AuditLogEntry.occurred_at >= audit.start,
+        AuditLogEntry.occurred_at < audit.end,
+    )
+    if audit.actor is not None:
+        query = query.where(AuditLogEntry.actor == audit.actor)
+    if audit.action is not None:
+        query = query.where(
+            or_(
+                AuditLogEntry.action == audit.action,
+                AuditLogEntry.action.startswith(f"{audit.action}.", autoescape=True),
+            )
+        )
+
+    return list(
+        db.execute(
+            query.order_by(AuditLogEntry.occurred_at.desc(), AuditLogEntry.id)
+            .limit(audit.limit)
+            .offset(audit.offset)
+        )
+        .scalars()
+        .all()
+    )
