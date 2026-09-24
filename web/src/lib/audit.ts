@@ -29,6 +29,8 @@ const ACTION_LABELS: Record<string, string> = {
   "operator.enabled": "Оператор включён",
   "operator.password_reset": "Сброшен пароль оператора",
   "request.window": "Запрос окна данных у станции",
+  "policy.changed": "Изменена политика сервера",
+  "policy.reset": "Политика сброшена к значениям сервера",
 };
 
 /**
@@ -40,6 +42,7 @@ export const ACTION_GROUPS: { value: string; label: string }[] = [
   { value: "agent", label: "Все действия станций" },
   { value: "enrollment_token", label: "Токены регистрации" },
   { value: "request", label: "Запросы окон" },
+  { value: "policy", label: "Изменения политики" },
 ];
 
 /** Every known action as a single filter choice. */

@@ -35,6 +35,8 @@ const EMITTED_ACTIONS = [
   "operator.disabled",
   "operator.enabled",
   "operator.password_reset",
+  "policy.changed",
+  "policy.reset",
   "request.window",
 ];
 
@@ -60,12 +62,13 @@ describe("actionLabel", () => {
 });
 
 describe("filter choices", () => {
-  it("offers the four groups the server's codes fall into", () => {
+  it("offers the five groups the server's codes fall into", () => {
     expect(ACTION_GROUPS.map((group) => group.value)).toEqual([
       "operator",
       "agent",
       "enrollment_token",
       "request",
+      "policy",
     ]);
     for (const group of ACTION_GROUPS) {
       expect(group.label).toMatch(/[А-Яа-яЁё]/);
