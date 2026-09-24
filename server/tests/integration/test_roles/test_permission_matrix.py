@@ -47,6 +47,8 @@ ENDPOINTS = [
         "POST", "/api/v1/agents/{agent_id}/requests", observer=False, body="window"
     ),
     Endpoint("GET", "/api/v1/audit", observer=False, params="range"),
+    Endpoint("PUT", "/api/v1/policy", observer=False, body="policy"),
+    Endpoint("DELETE", "/api/v1/policy", observer=False),
     Endpoint("GET", "/api/v1/operators", observer=False),
     Endpoint("POST", "/api/v1/operators", observer=False, body="new_operator"),
     Endpoint(
@@ -79,6 +81,11 @@ def _bodies() -> dict[str, dict]:
             "password": "a-long-enough-password",
         },
         "no_change": {"status": "active"},
+        "policy": {
+            "max_request_window_hours": 2,
+            "enrollment_token_ttl_hours": 12,
+            "session_lifetime_minutes": 60,
+        },
         "reset_password": {"new_password": "another-long-passphrase"},
     }
 

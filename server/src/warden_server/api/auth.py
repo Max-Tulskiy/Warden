@@ -1,5 +1,7 @@
 """Operator login, password change, and ending sessions."""
 
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,9 +18,15 @@ from warden_server.schemas.auth import (
 from warden_server.security import create_access_token, hash_password, verify_password
 from warden_server.services import throttle
 from warden_server.services.audit import log_event
+from warden_server.services.policy import effective_policy
 from warden_server.services.sessions import end_sessions
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
+
+def _session_lifetime(db: Session) -> timedelta:
+    """How long a session issued now lasts: the policy in force, read afresh."""
+    return timedelta(minutes=effective_policy(db).session_lifetime_minutes)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -72,7 +80,9 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     )
     db.commit()
     return TokenResponse(
-        access_token=create_access_token(operator.username, operator.token_version)
+        access_token=create_access_token(
+            operator.username, operator.token_version, _session_lifetime(db)
+        )
     )
 
 
@@ -138,7 +148,9 @@ def change_password(
     db.commit()
     db.refresh(operator)
     return TokenResponse(
-        access_token=create_access_token(operator.username, operator.token_version)
+        access_token=create_access_token(
+            operator.username, operator.token_version, _session_lifetime(db)
+        )
     )
 
 

@@ -1,4 +1,4 @@
-"""Integration: the read-only operating-policy endpoint (spec 002, R-7, A-7)."""
+"""Integration: reading the operating policy (specs 002 and 006)."""
 
 from warden_server.config import get_settings
 from warden_server.schemas.auth import MIN_PASSWORD_LENGTH
@@ -14,6 +14,9 @@ ALLOWED_FIELDS = {
     "max_report_events",
     "max_inventory_entries",
     "max_page_size",
+    "overridden",
+    "defaults",
+    "bounds",
 }
 
 
@@ -26,14 +29,24 @@ def test_each_value_equals_what_actually_enforces_it(client, auth_headers):
 
     body = client.get("/api/v1/policy", headers=auth_headers).json()
 
-    assert body == {
+    configured = {
         "max_request_window_hours": settings.max_request_window_hours,
         "enrollment_token_ttl_hours": settings.enrollment_token_ttl_hours,
         "session_lifetime_minutes": settings.jwt_expire_minutes,
+    }
+    assert body == {
+        **configured,
         "min_password_length": MIN_PASSWORD_LENGTH,
         "max_report_events": MAX_REPORT_EVENTS,
         "max_inventory_entries": MAX_INVENTORY_ENTRIES,
         "max_page_size": MAX_PAGE_SIZE,
+        "overridden": False,
+        "defaults": configured,
+        "bounds": {
+            "max_request_window_hours": {"min": 1, "max": 4},
+            "enrollment_token_ttl_hours": {"min": 1, "max": 168},
+            "session_lifetime_minutes": {"min": 5, "max": 1440},
+        },
     }
 
 

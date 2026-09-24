@@ -58,15 +58,17 @@ class TokenClaims(NamedTuple):
     version: int
 
 
-def create_access_token(subject: str, version: int) -> str:
+def create_access_token(subject: str, version: int, lifetime: timedelta) -> str:
     """Issue a session token for `subject` at the operator's current version.
 
-    `version` is required, so a caller that mints a token cannot forget it: a
-    token is refused once its operator's version has moved on (D-9), which is
-    how a session is ended before it expires.
+    `version` and `lifetime` are both required, so a caller that mints a token
+    cannot forget either. A token is refused once its operator's version has
+    moved on (D-9), which is how a session is ended before it expires. The
+    lifetime is the one in force (D-11) and comes from the caller: reading it
+    here from the settings would ignore a policy an administrator saved.
     """
     settings = get_settings()
-    expires_at = datetime.now(UTC) + timedelta(minutes=settings.jwt_expire_minutes)
+    expires_at = datetime.now(UTC) + lifetime
     payload: dict[str, Any] = {"sub": subject, "ver": version, "exp": expires_at}
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 

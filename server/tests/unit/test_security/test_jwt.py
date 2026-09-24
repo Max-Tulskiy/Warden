@@ -1,6 +1,7 @@
 """Tests for operator JWT issuance and verification (spec 004)."""
 
 import time
+from datetime import timedelta
 from typing import Any
 
 import jwt
@@ -12,6 +13,8 @@ from warden_server.security import (
     create_access_token,
     decode_access_token,
 )
+
+LIFETIME = timedelta(minutes=30)
 
 
 def _forge(payload: dict[str, Any]) -> str:
@@ -25,15 +28,15 @@ def _exp() -> int:
 
 
 def test_decode_access_token_returns_the_subject_and_the_version():
-    token = create_access_token("admin", 3)
+    token = create_access_token("admin", 3, LIFETIME)
 
     assert decode_access_token(token) == TokenClaims(subject="admin", version=3)
 
 
 def test_the_version_zero_round_trips():
-    assert decode_access_token(create_access_token("admin", 0)) == TokenClaims(
-        "admin", 0
-    )
+    assert decode_access_token(
+        create_access_token("admin", 0, LIFETIME)
+    ) == TokenClaims("admin", 0)
 
 
 def test_decode_access_token_rejects_a_garbage_token():
@@ -85,15 +88,20 @@ def test_a_token_signed_with_another_secret_is_rejected():
     assert decode_access_token(token) is None
 
 
-def test_the_version_does_not_change_how_long_a_token_lasts():
-    """Ending sessions must not alter the session lifetime (R-9)."""
+def test_a_token_lasts_exactly_as_long_as_it_was_given_whatever_its_version():
+    """Ending sessions must not alter the lifetime (spec 004, R-9), and the
+    lifetime is the caller's to choose (D-11), not read from the settings."""
     settings = get_settings()
-    expected = time.time() + settings.jwt_expire_minutes * 60
 
-    for version in (0, 7):
+    for version, lifetime in ((0, timedelta(minutes=5)), (7, timedelta(hours=24))):
         payload = jwt.decode(
-            create_access_token("admin", version),
+            create_access_token("admin", version, lifetime),
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
         )
-        assert abs(payload["exp"] - expected) < 5
+        assert abs(payload["exp"] - (time.time() + lifetime.total_seconds())) < 5
+
+
+def test_a_token_needs_a_lifetime():
+    with pytest.raises(TypeError):
+        create_access_token("admin", 0)  # type: ignore[call-arg]  # the point of the test

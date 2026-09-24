@@ -16,7 +16,6 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from warden_server.api.deps import ADMIN_ONLY_RESPONSES, require_admin, require_agent
-from warden_server.config import get_settings
 from warden_server.db import get_db
 from warden_server.models.agent import Agent, AgentStatus
 from warden_server.models.enrollment import EnrollmentToken
@@ -36,6 +35,7 @@ from warden_server.security import generate_secret_token, hash_secret_token
 from warden_server.services import tasks as tasks_service
 from warden_server.services.audit import log_event
 from warden_server.services.inventory import ingest_snapshot
+from warden_server.services.policy import effective_policy
 
 router = APIRouter(prefix="/api/v1", tags=["agents"])
 
@@ -50,10 +50,9 @@ def create_enrollment_token(
     operator: Operator = Depends(require_admin), db: Session = Depends(get_db)
 ) -> EnrollmentTokenOut:
     """Issue a one-time token an administrator hands to a new agent."""
-    settings = get_settings()
     token = generate_secret_token()
     now = datetime.now(UTC)
-    expires_at = now + timedelta(hours=settings.enrollment_token_ttl_hours)
+    expires_at = now + timedelta(hours=effective_policy(db).enrollment_token_ttl_hours)
     db.add(
         EnrollmentToken(
             token_hash=hash_secret_token(token),

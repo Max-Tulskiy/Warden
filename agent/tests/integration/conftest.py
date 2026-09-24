@@ -78,7 +78,9 @@ def operator_bearer_token(server_db) -> str:
     server_db.commit()
     # A session token carries the operator's version; the server refuses one
     # that does not match it.
-    return create_access_token(operator.username, operator.token_version)
+    return create_access_token(
+        operator.username, operator.token_version, timedelta(hours=1)
+    )
 
 
 @pytest.fixture
