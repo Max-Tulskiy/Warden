@@ -63,11 +63,16 @@ period you care about, request a window for it (the station page, at most 4
 hours per request). Repeated requests for overlapping windows can put
 duplicates in the report -- there is no deduplication on ingestion.
 
-**Settings.** Three blocks: changing your password (the current password is
-required; sessions already issued stay valid after the change until they
-expire, the lifetime being shown in the policy), the server policy
-(read-only: limits and lifetimes are set by the server's configuration), and
-the list of stations.
+**Settings.** Four blocks: changing your password (the current password is
+required; after the change this session carries on and all the operator's other
+sessions end -- their browsers return to the sign-in screen on the next action);
+sessions (the "Завершить все сеансы" (End all sessions) button, with a
+confirmation, signs you out of the panel on every device, this one included);
+the server policy (read-only: limits and lifetimes are set by the server's
+configuration); and the list of stations. The whole set of an operator's sessions
+always ends together; a single session cannot be chosen. After the server is
+upgraded to a version with session ending, each operator signs in once again:
+tokens issued earlier carry no version and are refused.
 
 **Disabling a station.** The "Отключить" (Disable) button in the stations
 block (with a confirmation) blocks the agent's key: on its next contact it
@@ -206,6 +211,33 @@ PostgreSQL. What this does **not** prove: the "stations" were HTTP calls from a
 script, not the agent service on Linux or Windows; the index was checked on a few
 hundred rows, and that period queries actually use it was not verified (the query
 plan was not examined); and there was only one browser -- Chromium.
+
+Ending sessions was walked through by hand on a real stack (`docker compose`:
+Caddy + PostgreSQL 16, a separate project with fresh volumes, the proxy on
+non-standard ports): through the proxy, and in two independent Chromium contexts
+driven by Playwright that stand for two browsers of one operator. Checked: the
+token carries `ver`; a wrong current password (400) and a too-short new one (422)
+end nothing; a successful password change answers 200 with a token whose version
+is one higher, the other session and the old token of the session that made the
+change get a 401 (the same response as for an invalid token), the returned token
+works, and the old password no longer signs in; a token with no `ver` is refused;
+`logout-all` gives a 401 without a token and a 204 with one, after which every
+session is refused, a second call gives a 401, and a new sign-in works; the audit
+log holds `operator.password_change` and `operator.sessions_revoked` and no
+passwords or tokens. In the browser: after a password change the first browser
+stays signed in and stores the new token, the second returns to the sign-in
+screen on its next action with the message "Сеанс завершён. Войдите снова."
+(the session has ended, sign in again) and clears its stored token, and after it
+signs in again the message is gone; "Завершить все сеансы" (end all sessions)
+asks for confirmation first, "Отмена" (cancel) sends nothing, confirming leads to
+the sign-in screen without the refusal message (it is a deliberate sign-out), and
+the second browser does get the message. The audit screen shows the new actions
+under their Russian names. The `token_version` migration was applied, reverted,
+and applied again on PostgreSQL, and an operator created before it read version
+0. What this does **not** prove: behavior with several server processes (the
+counter lives in the database, so it should hold, but there was one process);
+simultaneous password changes under load were not tested, and a single SQL
+statement is the guarantee; and there was only one browser -- Chromium.
 
 This is not an oversight -- it follows directly from constitution principle
 10 ("honesty about boundaries"): naming the actual level of confidence beats

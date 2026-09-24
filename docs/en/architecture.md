@@ -62,7 +62,7 @@ connection is not workable in practice.
 | `events` | Category events (`removable_media`, `printing`, `processes`, `web`), tied to the task they answered |
 | `inventory_snapshots` | Full hardware/software snapshots, append-only, never overwritten |
 | `inventory_changes` | Separate records of detected changes (added/removed/modified) |
-| `operators` | Panel administrator accounts |
+| `operators` | Panel administrator accounts; `token_version` is the counter whose increase ends all of an operator's sessions |
 | `audit_log` | Every notable action: enrollment, task dispatch, login, configuration changes; read in the panel on the "Журнал" (audit log) screen |
 
 ### Configuration-change detector
@@ -173,12 +173,34 @@ so the panel does not mistake it for an expired session) and is logged as
 mechanism as login (five in five minutes, a 429 response,
 `operator.password_change_throttled`), but under a key of its own: the holder
 of a stolen token cannot use this endpoint to lock the real operator out of
-login. The passwords themselves never reach the log. Changing the password
-does **not** revoke sessions already issued: a JWT is self-contained and stays
-valid until it expires (`jwt_expire_minutes`, 8 hours by default) -- a
-limitation, not a solved problem. The seed account from `WARDEN_SEED_ADMIN_*`
-is created only when the operators table is empty, so restarting the
-container does not bring the old password back.
+login. The passwords themselves never reach the log. The seed account from
+`WARDEN_SEED_ADMIN_*` is created only when the operators table is empty, so
+restarting the container does not bring the old password back.
+
+**Sessions.** An operator's session is a JWT with the claims `sub`, `exp` and
+`ver`, where `ver` is the value of `operators.token_version` at the time it was
+issued. `require_operator` answers with the same 401 as for any invalid token
+when `ver` is missing, is not an integer, or differs from the operator's
+current value (decision D-9 of the constitution). Raising that one number
+therefore ends all of an operator's sessions at once, and two operations raise
+it. A successful password change answers 200 with a token for the new version:
+the session that made the change carries on, and the others get a 401 on their
+next request. `POST /api/v1/auth/logout-all` (204) ends every session,
+including the current one, and logs `operator.sessions_revoked`. A failed
+password change (400, 422, 429) ends nothing. The increment is a single SQL
+statement, `token_version = token_version + 1`, not a read-modify-write in
+Python, so two simultaneous requests cannot drop a revocation. The session
+lifetime (`jwt_expire_minutes`, 8 hours by default) is unchanged. A token
+issued before versions existed has no `ver` and is refused once after the
+server is upgraded: the operator simply signs in again.
+
+The panel handles a refusal in one place. When the server answers 401 to a
+request **that carried a token**, the API client calls a registered handler,
+which clears the session, and `RequireAuth` sends the operator to the sign-in
+screen with the message "Сеанс завершён. Войдите снова." (the session has
+ended, sign in again). A sign-in with a wrong password (a 401 with no token) and
+a wrong current password on the change form (a 400) do not count as a refused
+session. A single session cannot be ended on its own -- only all of them.
 
 All external traffic runs over TLS, terminated at the Caddy reverse proxy
 (`docker-compose.yml`, `Caddyfile`), not by the application server itself.
@@ -228,8 +250,11 @@ The full list is constitution Section V. The essentials:
 - repeated requests for overlapping windows store the same event twice --
   there is no deduplication on ingestion, so the report (like the daily one)
   can show duplicates;
-- changing the password does not end sessions already issued: a stolen token
-  works until it expires (8 hours by default);
+- only all of an operator's sessions can be ended at once, and only by the
+  operator: a single session can be neither seen nor ended alone, and a stolen
+  token works until the operator changes the password, ends all sessions, or the
+  token expires (8 hours by default). The server does not detect a theft. A
+  session issued before versions existed is refused once after the upgrade;
 - the audit log is incomplete: it records changes and sign-ins, but not reads
   (reports, station lists, the log itself) and not the rejections a disabled
   station receives;
