@@ -104,6 +104,12 @@ jobs:
           cache-dependency-path: server/pyproject.toml
       - run: pip install -e ".[dev]" schemathesis
         working-directory: server
+      # The server does not create its own tables (docker-compose migrates
+      # before it starts, and so does server-postgres-smoke above). Without
+      # this step every request that reaches the database is a 500 "no such
+      # table", which fails the check for a reason unrelated to the contract.
+      - run: alembic upgrade head
+        working-directory: server
       - name: Start the server
         working-directory: server
         env:
