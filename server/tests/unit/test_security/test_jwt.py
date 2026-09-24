@@ -59,6 +59,16 @@ def test_a_subject_that_is_not_a_string_is_rejected(subject: Any):
     assert decode_access_token(token) is None
 
 
+def test_a_non_string_subject_is_rejected_even_if_the_library_lets_it_through(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """PyJWT rejects such a `sub` itself only from 2.10; the project supports
+    2.8 and later, so the check here has to hold on its own."""
+    monkeypatch.setattr(jwt, "decode", lambda *args, **kwargs: {"sub": 7, "ver": 0})
+
+    assert decode_access_token("any-token") is None
+
+
 def test_an_expired_token_is_rejected():
     token = _forge({"sub": "admin", "ver": 0, "exp": int(time.time()) - 10})
 
