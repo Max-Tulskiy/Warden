@@ -18,6 +18,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EnrollmentTokenOut'
+        '403':
+          description: Administrator role required
       security:
       - HTTPBearer: []
   /api/v1/enroll:
@@ -83,6 +85,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AgentOut'
+        '403':
+          description: Administrator role required
         '422':
           description: Validation Error
           content:
@@ -242,6 +246,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TaskOut'
+        '403':
+          description: Administrator role required
         '422':
           description: Validation Error
           content:
@@ -273,6 +279,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/me:
+    get:
+      tags:
+      - auth
+      summary: Me
+      description: Who is signed in and what they may do; the panel shapes itself
+        by it.
+      operationId: me_api_v1_auth_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeOut'
+      security:
+      - HTTPBearer: []
   /api/v1/auth/password:
     post:
       tags:
@@ -641,6 +664,148 @@ paths:
                 items:
                   $ref: '#/components/schemas/AuditEntryOut'
                 title: Response Audit Log Api V1 Audit Get
+        '403':
+          description: Administrator role required
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/operators:
+    get:
+      tags:
+      - operators
+      summary: List Operators
+      operationId: list_operators_api_v1_operators_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/OperatorOut'
+                type: array
+                title: Response List Operators Api V1 Operators Get
+        '403':
+          description: Administrator role required
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - operators
+      summary: Create Operator
+      description: Create an account. Usernames are unique regardless of letter case.
+      operationId: create_operator_api_v1_operators_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperatorCreateIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorOut'
+        '403':
+          description: Administrator role required
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/operators/{operator_id}:
+    patch:
+      tags:
+      - operators
+      summary: Update Operator
+      description: 'Change another account''s role and/or status.
+
+
+        An administrator cannot address their own account, so the caller always
+
+        remains an active administrator: the panel''s own actions can never leave
+        the
+
+        deployment with none. Setting what the account already has is a no-op and
+
+        writes nothing. Disabling ends the account''s sessions; a role change does
+
+        not need to, because the role is read live on every request.'
+      operationId: update_operator_api_v1_operators__operator_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: operator_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Operator Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperatorUpdateIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorOut'
+        '403':
+          description: Administrator role required
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/operators/{operator_id}/password:
+    post:
+      tags:
+      - operators
+      summary: Reset Password
+      description: 'Set another account''s password, ending its sessions.
+
+
+        Never one''s own: that goes through the change form, which asks for the
+
+        current password. The account''s login and password-change throttles are
+
+        cleared, so a colleague who was locked out can sign in with the new password.'
+      operationId: reset_password_api_v1_operators__operator_id__password_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: operator_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Operator Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperatorPasswordResetIn'
+      responses:
+        '204':
+          description: Successful Response
+        '403':
+          description: Administrator role required
         '422':
           description: Validation Error
           content:
@@ -929,6 +1094,106 @@ components:
       - username
       - password
       title: LoginRequest
+    MeOut:
+      properties:
+        username:
+          type: string
+          title: Username
+        role:
+          $ref: '#/components/schemas/OperatorRole'
+      type: object
+      required:
+      - username
+      - role
+      title: MeOut
+      description: Who the signed-in operator is and what they may do.
+    OperatorCreateIn:
+      properties:
+        username:
+          type: string
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$
+          title: Username
+        role:
+          $ref: '#/components/schemas/OperatorRole'
+        password:
+          type: string
+          maxLength: 1024
+          minLength: 12
+          title: Password
+      type: object
+      required:
+      - username
+      - role
+      - password
+      title: OperatorCreateIn
+      description: The body of `POST /api/v1/operators`.
+    OperatorOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        username:
+          type: string
+          title: Username
+        role:
+          $ref: '#/components/schemas/OperatorRole'
+        status:
+          $ref: '#/components/schemas/OperatorStatus'
+      type: object
+      required:
+      - id
+      - username
+      - role
+      - status
+      title: OperatorOut
+      description: 'An account as an administrator sees it: never any password data.'
+    OperatorPasswordResetIn:
+      properties:
+        new_password:
+          type: string
+          maxLength: 1024
+          minLength: 12
+          title: New Password
+      additionalProperties: false
+      type: object
+      required:
+      - new_password
+      title: OperatorPasswordResetIn
+      description: The body of `POST /api/v1/operators/{id}/password`.
+    OperatorRole:
+      type: string
+      enum:
+      - admin
+      - viewer
+      title: OperatorRole
+      description: What an account may do. Two roles, enforced by the server (D-10).
+    OperatorStatus:
+      type: string
+      enum:
+      - active
+      - disabled
+      title: OperatorStatus
+    OperatorUpdateIn:
+      properties:
+        role:
+          anyOf:
+          - $ref: '#/components/schemas/OperatorRole'
+          - type: 'null'
+        status:
+          anyOf:
+          - $ref: '#/components/schemas/OperatorStatus'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      title: OperatorUpdateIn
+      description: 'The body of `PATCH /api/v1/operators/{id}`: a role, a status,
+        or both.
+
+
+        Any other field is refused, so a password can never ride along in a general
+
+        update; resetting one has its own endpoint with its own rules.'
     PasswordChangeIn:
       properties:
         current_password:
