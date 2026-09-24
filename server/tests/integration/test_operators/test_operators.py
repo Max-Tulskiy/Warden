@@ -5,6 +5,7 @@ import uuid
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from warden_server.models.audit import AuditLogEntry
 from warden_server.models.operator import Operator, OperatorRole, OperatorStatus
@@ -132,6 +133,29 @@ def test_a_username_that_exists_ignoring_case_is_a_409_and_nothing_is_stored(
 
     assert response.status_code == 409
     assert db_session.query(Operator).count() == 2
+    assert _rows(db_session, "operator.created") == []
+
+
+def test_two_requests_creating_one_name_at_once_leave_one_account_and_a_409(
+    client, auth_headers, db_session, monkeypatch
+):
+    """The duplicate check can pass for both requests; the unique constraint
+    then decides, and the loser must get the same 409, not a server error."""
+    real_commit = db_session.commit
+    attempts = []
+
+    def commit_losing_the_race():
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise IntegrityError("INSERT", {}, Exception("duplicate"))
+        real_commit()
+
+    monkeypatch.setattr(db_session, "commit", commit_losing_the_race)
+
+    response = _create(client, auth_headers)
+
+    assert response.status_code == 409
+    assert db_session.query(Operator).count() == 1
     assert _rows(db_session, "operator.created") == []
 
 

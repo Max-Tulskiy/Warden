@@ -61,6 +61,12 @@ def test_the_audit_log_tells_a_disabled_account_from_a_wrong_password(
     assert _failure_reasons(db_session) == ["disabled", "bad_password"]
 
 
+def test_an_unknown_user_is_recorded_with_its_own_reason(client, db_session):
+    _login(client, "nobody", "whatever-password")
+
+    assert _failure_reasons(db_session) == ["unknown_user"]
+
+
 def test_a_disabled_operators_existing_session_is_refused_and_returns_on_enabling(
     client, viewer, viewer_headers, db_session
 ):
