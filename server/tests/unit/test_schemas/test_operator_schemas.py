@@ -2,14 +2,14 @@
 
 import pytest
 from pydantic import ValidationError
+
+from warden_server.models.operator import OperatorRole, OperatorStatus
+from warden_server.schemas.auth import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH
 from warden_server.schemas.operator import (
     OperatorCreateIn,
     OperatorPasswordResetIn,
     OperatorUpdateIn,
 )
-
-from warden_server.models.operator import OperatorRole, OperatorStatus
-from warden_server.schemas.auth import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH
 
 GOOD_PASSWORD = "a-long-enough-password"  # noqa: S105 -- test value, not a secret
 
