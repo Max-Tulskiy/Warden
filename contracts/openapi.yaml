@@ -217,11 +217,15 @@ paths:
       description: 'Place a request for a station''s data over a bounded time window.
 
 
-        `WindowRequestIn` already rejects a window over the configured maximum
+        `WindowRequestIn` already rejects a window over the four-hour ceiling
 
-        (constitution principle 3); this endpoint only needs to confirm the
+        (constitution principle 3), with no database; this endpoint additionally
 
-        target agent exists.'
+        holds the window to the limit in force, which an administrator may have
+
+        lowered, and confirms the target agent exists. A request placed before the
+
+        limit was lowered stays as it was placed.'
       operationId: create_window_request_api_v1_agents__agent_id__requests_post
       security:
       - HTTPBearer: []
@@ -566,8 +570,8 @@ paths:
       tags:
       - policy
       summary: Get Policy
-      description: Return the limits the server enforces, read from where they are
-        enforced.
+      description: Return the limits in force, and the range and default of each editable
+        one.
       operationId: get_policy_api_v1_policy_get
       responses:
         '200':
@@ -576,6 +580,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PolicyOut'
+      security:
+      - HTTPBearer: []
+    put:
+      tags:
+      - policy
+      summary: Save Policy
+      description: 'Save all three values, putting them in force from the next use.
+
+
+        A session, an enrollment token, or a queued request that already exists
+
+        keeps what it was issued with. Saving what is already in force writes
+
+        nothing to the audit log.'
+      operationId: save_policy_api_v1_policy_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyUpdateIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyOut'
+        '403':
+          description: Administrator role required
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+    delete:
+      tags:
+      - policy
+      summary: Reset Policy
+      description: Forget the saved policy, so the server's configured values apply
+        again.
+      operationId: reset_policy_api_v1_policy_delete
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyOut'
+        '403':
+          description: Administrator role required
       security:
       - HTTPBearer: []
   /api/v1/audit:
@@ -918,6 +976,20 @@ components:
         newer server must still be readable, so the set of codes is not enforced
 
         on the way out.'
+    Bounds:
+      properties:
+        min:
+          type: integer
+          title: Min
+        max:
+          type: integer
+          title: Max
+      type: object
+      required:
+      - min
+      - max
+      title: Bounds
+      description: The lowest and highest value an editable setting may take.
     EnrollRequest:
       properties:
         token:
@@ -1212,6 +1284,22 @@ components:
       - new_password
       title: PasswordChangeIn
       description: The body of `POST /api/v1/auth/password`.
+    PolicyBounds:
+      properties:
+        max_request_window_hours:
+          $ref: '#/components/schemas/Bounds'
+        enrollment_token_ttl_hours:
+          $ref: '#/components/schemas/Bounds'
+        session_lifetime_minutes:
+          $ref: '#/components/schemas/Bounds'
+      type: object
+      required:
+      - max_request_window_hours
+      - enrollment_token_ttl_hours
+      - session_lifetime_minutes
+      title: PolicyBounds
+      description: The range of each editable value, so the panel never has to copy
+        them.
     PolicyOut:
       properties:
         max_request_window_hours:
@@ -1235,6 +1323,13 @@ components:
         max_page_size:
           type: integer
           title: Max Page Size
+        overridden:
+          type: boolean
+          title: Overridden
+        defaults:
+          $ref: '#/components/schemas/PolicyValues'
+        bounds:
+          $ref: '#/components/schemas/PolicyBounds'
       type: object
       required:
       - max_request_window_hours
@@ -1244,9 +1339,21 @@ components:
       - max_report_events
       - max_inventory_entries
       - max_page_size
+      - overridden
+      - defaults
+      - bounds
       title: PolicyOut
-      description: 'Server limits an administrator can see but not change from the
-        panel.
+      description: 'The operating limits in force, and what an administrator may do
+        with them.
+
+
+        The three editable values are the ones in force now, whether they came from
+
+        a saved policy (`overridden`) or from the server''s configuration. `defaults`
+
+        is what the configuration gives them, which a reset returns to, and `bounds`
+
+        is the range each may take. The other four limits stay in the code.
 
 
         An explicit allow-list: every field is named here on purpose, so a secret
@@ -1254,6 +1361,53 @@ components:
         or connection string in `Settings` can never reach the response by being
 
         added there.'
+    PolicyUpdateIn:
+      properties:
+        max_request_window_hours:
+          type: integer
+          maximum: 4.0
+          minimum: 1.0
+          title: Max Request Window Hours
+        enrollment_token_ttl_hours:
+          type: integer
+          maximum: 168.0
+          minimum: 1.0
+          title: Enrollment Token Ttl Hours
+        session_lifetime_minutes:
+          type: integer
+          maximum: 1440.0
+          minimum: 5.0
+          title: Session Lifetime Minutes
+      additionalProperties: false
+      type: object
+      required:
+      - max_request_window_hours
+      - enrollment_token_ttl_hours
+      - session_lifetime_minutes
+      title: PolicyUpdateIn
+      description: 'The body of `PUT /api/v1/policy`: all three values, each within
+        its bounds.
+
+
+        Nothing else is accepted, and each value must be a whole number.'
+    PolicyValues:
+      properties:
+        max_request_window_hours:
+          type: integer
+          title: Max Request Window Hours
+        enrollment_token_ttl_hours:
+          type: integer
+          title: Enrollment Token Ttl Hours
+        session_lifetime_minutes:
+          type: integer
+          title: Session Lifetime Minutes
+      type: object
+      required:
+      - max_request_window_hours
+      - enrollment_token_ttl_hours
+      - session_lifetime_minutes
+      title: PolicyValues
+      description: The three values an administrator can change, whatever their source.
     ReportEventOut:
       properties:
         id:
@@ -1405,11 +1559,13 @@ components:
         window.
 
 
-        The window is capped at `max_request_window_hours` (4 by default,
+        The window is capped at the constant four-hour ceiling (constitution
 
-        constitution principle 3); this is the server-side half of the check that
+        principle 3); this is the server-side half of the check that is repeated
 
-        is repeated independently on the agent.'
+        independently on the agent, and it needs no database. The limit an
+
+        administrator may have set below the ceiling is enforced by the endpoint.'
   securitySchemes:
     HTTPBearer:
       type: http
