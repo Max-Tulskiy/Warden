@@ -63,6 +63,7 @@ connection is not workable in practice.
 | `inventory_snapshots` | Full hardware/software snapshots, append-only, never overwritten |
 | `inventory_changes` | Separate records of detected changes (added/removed/modified) |
 | `operators` | Panel accounts: a role (`role`: administrator or observer), a status (`status`: active or disabled), and `token_version`, the counter whose increase ends all of an operator's sessions |
+| `policy_overrides` | The policy an administrator saved: the window limit, the enrollment token lifetime, and the session lifetime as one set (at most one row; no row means the server's configuration applies) |
 | `audit_log` | Every notable action: enrollment, task dispatch, login, configuration changes; read in the panel on the "Журнал" (audit log) screen |
 
 ### Configuration-change detector
@@ -95,14 +96,38 @@ places with an agent (principle 3), while the report only reads what is
 already stored, so a week-long range is allowed. `events` has an index,
 `ix_events_occurred_at`, for the time lookup.
 
-**The server policy** (`GET /api/v1/policy`) is read-only: the request-window
-cap, the lifetime of an enrollment token and of a session, the minimum
-password length, and the limits on an agent report, an inventory snapshot,
-and a page of results. Each value is read from where it is actually enforced,
-and the response is an explicit list of fields rather than a dump of the
-settings, so a secret (`jwt_secret`, the database connection string) cannot
-reach it by accident. These values cannot be changed from the panel -- only
-through the server's configuration.
+**The server policy** (`GET /api/v1/policy`). An administrator changes three
+values from the panel: the request-window limit (1-4 hours), the lifetime of an
+enrollment token (1-168 hours), and the lifetime of a session (5-1440 minutes).
+They are stored in the database as one set (`policy_overrides`, at most one row);
+the server's configuration (`WARDEN_MAX_REQUEST_WINDOW_HOURS`,
+`WARDEN_ENROLLMENT_TOKEN_TTL_HOURS`, `WARDEN_JWT_EXPIRE_MINUTES`) gives their
+defaults, and a saved set outranks the configuration until it is reset. One place,
+`services/policy.py`, decides which value is in force; every use (a window
+request, a token issue, a sign-in) reads it afresh, with no cache, so a change
+applies from the next use and is right across several server processes. Sessions,
+tokens, and requests that already exist keep their own lifetime or limit.
+
+The four-hour window ceiling is a constant in code, not a setting (principle 3): the
+server checks it on its own, without the database; a configured value above 4 is
+clamped to 4; a value above 4 cannot be saved; and the agent still checks its own
+limit independently. The limit an administrator may have lowered is applied by the
+window-request endpoint (a 422, "the request window must not exceed N hours").
+
+Operations: `GET` returns the values in force, `overridden` (whether a policy is
+saved), `defaults` (the configured values a reset goes back to), and `bounds` (the
+ranges); `PUT` saves all three values (whole numbers within their ranges only, no
+extra fields; saving what is already in force writes nothing to the audit log);
+`DELETE` resets the set to the configuration. Saving and resetting are for
+administrators only (a 403 otherwise); the log records `policy.changed` (the old
+and new value of each changed one) and `policy.reset`. The other limits -- the
+minimum password length and the limits on an agent report, an inventory snapshot,
+and a page of results -- stay in the code and cannot be changed from the panel. The
+response is an explicit list of fields rather than a dump of the settings, so a
+secret (`jwt_secret`, the database connection string) cannot reach it by accident.
+The window request form in the panel takes the limit in force from the server and
+checks against it before sending; if the policy could not be loaded it shows 4
+hours, and the server still applies the real limit.
 
 **Disabling a station** (`PATCH /api/v1/agents/{id}` with status `disabled` or
 `active`). Enforcement is the existing `require_agent` dependency: an agent
@@ -214,6 +239,7 @@ An operator account has one of two roles (decision D-10 of the constitution).
 | Stations, reports, inventory changes, the server policy (read-only) | yes | yes |
 | Changing one's own password, ending one's own sessions, `GET /api/v1/auth/me` | yes | yes |
 | Requesting data from a station, issuing an enrollment token, disabling and enabling a station | no | yes |
+| Changing the server policy | no | yes |
 | The audit log | no | yes |
 | Managing accounts | no | yes |
 
@@ -331,6 +357,14 @@ The full list is constitution Section V. The essentials:
   system without an active administrator: the rule that nobody changes their own
   account guarantees a remaining administrator only while actions are
   sequential, and repairing that race needs direct access to the database;
+- a policy change applies only from the next use: sessions, enrollment tokens, and
+  window requests that already exist keep their own lifetime or limit, so shortening
+  a session or a token lifetime ends nothing that is already out there;
+- there is one policy for the whole deployment, and the audit log is its only
+  history: no setting per operator or station, and no history screen or undo other
+  than the reset to the configuration;
+- a saved policy outranks the server's configuration until it is reset: after the
+  first save, editing the configuration alone does not change these three values;
 - the audit log is incomplete: it records changes and sign-ins, but not reads
   (reports, station lists, the log itself) and not the rejections a disabled
   station receives;

@@ -68,11 +68,32 @@ required; after the change this session carries on and all the operator's other
 sessions end -- their browsers return to the sign-in screen on the next action);
 sessions (the "Завершить все сеансы" (End all sessions) button, with a
 confirmation, signs you out of the panel on every device, this one included);
-the server policy (read-only: limits and lifetimes are set by the server's
-configuration); and the list of stations. The whole set of an operator's sessions
+the server policy (an administrator changes three values, the rest is
+read-only -- see below); and the list of stations. The whole set of an operator's sessions
 always ends together; a single session cannot be chosen. After the server is
 upgraded to a version with session ending, each operator signs in once again:
 tokens issued earlier carry no version and are refused.
+
+**Server policy.** In "Настройки" (Settings) an administrator changes three values: the
+longest request window for a station (1 to 4 hours), the lifetime of an enrollment token
+(1 to 168 hours), and the lifetime of a session (5 minutes to 24 hours). Beside each
+field are its allowed range and the default from the server's configuration. The window
+can never exceed 4 hours, whatever is set: it is a ceiling, not a parameter. "Сохранить"
+(Save) writes all three values; the new window limit applies to the next requests, the
+session length to new sign-ins, and the token lifetime to new tokens, while sessions,
+tokens, and requests already issued keep their own lifetime. Once a policy is saved a
+"Сбросить к значениям сервера" (Reset to the server's values) button appears (with a
+confirmation): it deletes the saved set, and the configuration applies again.
+**Important:** while a policy is saved, the server variables
+`WARDEN_MAX_REQUEST_WINDOW_HOURS`, `WARDEN_ENROLLMENT_TOKEN_TTL_HOURS`, and
+`WARDEN_JWT_EXPIRE_MINUTES` are only defaults, and editing them changes nothing until
+the policy is reset. (The shipped `docker-compose.yml` does not forward these three from
+`.env`: to change the defaults, add them to the `environment` of the `server` service.) The form that
+requests a station's data shows the window limit in force. An observer sees the same
+values but cannot change them. The other limits (upload size, page size, minimum
+password length) are set by the configuration and cannot be changed from the panel. Who
+changed the policy, and when, is in the "Журнал" (audit log), group "Изменения политики"
+(policy changes).
 
 **Disabling a station.** The "Отключить" (Disable) button in the stations
 block (with a confirmation) blocks the agent's key: on its next contact it
@@ -294,6 +315,44 @@ applied again on PostgreSQL: an operator that existed before it became
 administrators disabling each other at the same instant (it is named as a boundary
 and was not reproduced); behavior with several server processes; and there was
 only one browser -- Chromium.
+
+The editable policy was walked through by hand on a real stack (`docker compose`: Caddy
++ PostgreSQL 16, a separate project with fresh volumes, the proxy on non-standard
+ports): through the proxy, and in two independent Chromium contexts driven by Playwright
+that stand for an administrator and an observer at the same time. Through the proxy:
+before the first save the configuration's values are in force, `overridden` is false,
+and `defaults` and `bounds` match the fixed ranges; an observer reads the policy and
+gets 403 on `PUT` and `DELETE`, and without a token both give 401; ten bad bodies (a
+window of 5 and 0, a token of 169, a session of 4 and 1441, a fraction, a string, a
+boolean, a missing value, an extra field) give 422 and store nothing; after saving 2 h /
+2 h / 30 min, a 3-hour window is refused naming the limit and a 2-hour one is accepted,
+a new enrollment token lives 2 hours, a new sign-in gets a 30-minute session, and a
+session issued before the change keeps working and keeps its 8-hour expiry; saving the
+same values again adds nothing to the audit log; the log holds one `policy.changed` with
+the old and new values and the `overridden` marker and, after a reset, one `policy.reset`
+with the values it went back to, a second reset writes nothing, and no secret is in the
+entries; a 5-hour window is refused even with nothing saved (the ceiling). Separately:
+after saving 3 h / 6 h / 45 min the server's configuration was changed (session 15
+minutes, window 6 hours, token 48 hours) and the server container recreated, and the
+saved values stayed in force while `defaults` showed the new configuration, the 6-hour
+window clamped to 4; after a reset the new values applied (window 4, token 48, session
+15), a new sign-in gave 15 minutes, and a 5-hour window was still refused. In the
+browser: an administrator sees three fields with values, units, ranges, and defaults,
+and before a save a note that the configuration decides and no reset button; a window
+of 5 is refused on screen naming the range; a save says what applies when, announces
+the saved policy, and reveals the reset button; the station's data-request form names
+the limit in force (2 hours), refuses a 3-hour window before sending and accepts a
+2-hour one; an observer sees the saved values as rows with no fields or buttons and a
+note that only administrators can change them; the reset first asks, naming the values
+it returns to, "Отмена" (cancel) changes nothing, and confirming returns the
+configuration; and the audit screen shows both actions under Russian names in the
+"Изменения политики" (policy changes) group. The migration was applied, reverted, and
+applied again on PostgreSQL: the table is created empty, a second row is refused by the
+check, and `alembic check` is clean. What this does **not** prove: two administrators
+saving for the first time at the same instant (only a unit test that simulates the
+failed insert covers that race); behavior with several server processes (reading at
+every use should provide it, but there was one process); and there was only one
+browser -- Chromium.
 
 This is not an oversight -- it follows directly from constitution principle
 10 ("honesty about boundaries"): naming the actual level of confidence beats
