@@ -1,5 +1,7 @@
 import { createContext, useContext } from "react";
 
+import type { Role } from "../api/types";
+
 export interface AuthContextValue {
   token: string | null;
   username: string | null;
@@ -9,6 +11,13 @@ export interface AuthContextValue {
    * context built by hand, as the tests do, means "not ended".
    */
   sessionEnded?: boolean;
+  /**
+   * What the signed-in person may do, from the server. Null while it is being
+   * loaded, when nobody is signed in, and if it could not be loaded; the panel
+   * offers nothing that needs a role until it is known. Optional, like
+   * `sessionEnded`, so a context built by hand means "unknown".
+   */
+  role?: Role | null;
   setSession: (session: { token: string; username: string } | null) => void;
 }
 

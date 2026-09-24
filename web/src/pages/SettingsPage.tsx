@@ -68,7 +68,7 @@ function passwordErrorMessage(error: unknown): string {
 }
 
 export function SettingsPage() {
-  const { token, username, setSession } = useAuth();
+  const { token, username, role, setSession } = useAuth();
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [policyError, setPolicyError] = useState<string | null>(null);
   const [stations, setStations] = useState<Agent[] | null>(null);
@@ -100,6 +100,18 @@ export function SettingsPage() {
       .catch(() => {
         if (!cancelled) setPolicyError("Не удалось загрузить политику сервера");
       });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  // Enabling and disabling stations is an administrator's job, so only an
+  // administrator loads the list; an observer never sees this card at all.
+  useEffect(() => {
+    if (!token || role !== "admin") return;
+    let cancelled = false;
+
     listAgents(token)
       .then((loaded) => {
         if (!cancelled) setStations(loaded);
@@ -111,7 +123,7 @@ export function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, role]);
 
   const handlePasswordSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -304,105 +316,107 @@ export function SettingsPage() {
           </p>
         </section>
 
-        <section className="card" style={{ padding: "20px 0 4px 0" }}>
-          <h2
-            style={{
-              margin: "0 0 14px 0",
-              padding: "0 22px",
-              fontSize: 15,
-              fontWeight: 600,
-            }}
-          >
-            Станции
-          </h2>
-          {stationsError && (
-            <p className="error" style={{ padding: "0 22px" }}>
-              {stationsError}
-            </p>
-          )}
-          {stationActionError && (
-            <p className="error" style={{ padding: "0 22px" }}>
-              {stationActionError}
-            </p>
-          )}
-          {!stations && !stationsError && (
-            <p className="text-secondary" style={{ padding: "0 22px" }}>
-              Загрузка...
-            </p>
-          )}
-          {stations && stations.length === 0 && (
-            <p className="muted" style={{ padding: "0 22px" }}>
-              Нет зарегистрированных станций.
-            </p>
-          )}
-          {stations && stations.length > 0 && (
-            <table>
-              <thead>
-                <tr>
-                  <th style={{ width: "28%" }}>Станция</th>
-                  <th style={{ width: "14%" }}>ОС</th>
-                  <th style={{ width: "18%" }}>Статус</th>
-                  <th>Действие</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stations.map((station) => (
-                  <tr key={station.id}>
-                    <td className="mono" style={{ fontWeight: 500 }}>
-                      {station.hostname}
-                    </td>
-                    <td className="text-secondary">{station.os}</td>
-                    <td>
-                      <StatusPill status={stationStatus(station)} />
-                    </td>
-                    <td>
-                      {station.status === "disabled" ? (
-                        <button
-                          className="btn-secondary"
-                          type="button"
-                          disabled={busyId === station.id}
-                          onClick={() => applyStatus(station, "active")}
-                        >
-                          Включить
-                        </button>
-                      ) : confirmingId === station.id ? (
-                        <div className="confirm-inline">
-                          <span>
-                            Отключить станцию {station.hostname}? Её агент перестанет
-                            проходить проверку подлинности.
-                          </span>
-                          <button
-                            className="btn-danger"
-                            type="button"
-                            disabled={busyId === station.id}
-                            onClick={() => applyStatus(station, "disabled")}
-                          >
-                            Да, отключить
-                          </button>
+        {role === "admin" && (
+          <section className="card" style={{ padding: "20px 0 4px 0" }}>
+            <h2
+              style={{
+                margin: "0 0 14px 0",
+                padding: "0 22px",
+                fontSize: 15,
+                fontWeight: 600,
+              }}
+            >
+              Станции
+            </h2>
+            {stationsError && (
+              <p className="error" style={{ padding: "0 22px" }}>
+                {stationsError}
+              </p>
+            )}
+            {stationActionError && (
+              <p className="error" style={{ padding: "0 22px" }}>
+                {stationActionError}
+              </p>
+            )}
+            {!stations && !stationsError && (
+              <p className="text-secondary" style={{ padding: "0 22px" }}>
+                Загрузка...
+              </p>
+            )}
+            {stations && stations.length === 0 && (
+              <p className="muted" style={{ padding: "0 22px" }}>
+                Нет зарегистрированных станций.
+              </p>
+            )}
+            {stations && stations.length > 0 && (
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: "28%" }}>Станция</th>
+                    <th style={{ width: "14%" }}>ОС</th>
+                    <th style={{ width: "18%" }}>Статус</th>
+                    <th>Действие</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stations.map((station) => (
+                    <tr key={station.id}>
+                      <td className="mono" style={{ fontWeight: 500 }}>
+                        {station.hostname}
+                      </td>
+                      <td className="text-secondary">{station.os}</td>
+                      <td>
+                        <StatusPill status={stationStatus(station)} />
+                      </td>
+                      <td>
+                        {station.status === "disabled" ? (
                           <button
                             className="btn-secondary"
                             type="button"
-                            onClick={() => setConfirmingId(null)}
+                            disabled={busyId === station.id}
+                            onClick={() => applyStatus(station, "active")}
                           >
-                            Отмена
+                            Включить
                           </button>
-                        </div>
-                      ) : (
-                        <button
-                          className="btn-secondary"
-                          type="button"
-                          onClick={() => setConfirmingId(station.id)}
-                        >
-                          Отключить
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
+                        ) : confirmingId === station.id ? (
+                          <div className="confirm-inline">
+                            <span>
+                              Отключить станцию {station.hostname}? Её агент перестанет
+                              проходить проверку подлинности.
+                            </span>
+                            <button
+                              className="btn-danger"
+                              type="button"
+                              disabled={busyId === station.id}
+                              onClick={() => applyStatus(station, "disabled")}
+                            >
+                              Да, отключить
+                            </button>
+                            <button
+                              className="btn-secondary"
+                              type="button"
+                              onClick={() => setConfirmingId(null)}
+                            >
+                              Отмена
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="btn-secondary"
+                            type="button"
+                            onClick={() => setConfirmingId(station.id)}
+                          >
+                            Отключить
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+        )}
       </div>
     </AppShell>
   );

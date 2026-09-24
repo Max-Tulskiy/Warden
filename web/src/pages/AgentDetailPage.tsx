@@ -21,7 +21,7 @@ const PAGE_SIZE = 500;
 
 export function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
-  const { token } = useAuth();
+  const { token, role } = useAuth();
   const [reportDate, setReportDate] = useState(today());
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [hasMoreEvents, setHasMoreEvents] = useState(false);
@@ -97,17 +97,19 @@ export function AgentDetailPage() {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        <section className="card">
-          <h2 style={{ margin: "0 0 14px 0", fontSize: 15, fontWeight: 600 }}>
-            Запросить данные за промежуток
-          </h2>
-          <WindowRequestForm onSubmit={handleWindowRequest} />
-          {requestMessage && (
-            <p className="muted" style={{ marginBottom: 0 }}>
-              {requestMessage}
-            </p>
-          )}
-        </section>
+        {role === "admin" && (
+          <section className="card">
+            <h2 style={{ margin: "0 0 14px 0", fontSize: 15, fontWeight: 600 }}>
+              Запросить данные за промежуток
+            </h2>
+            <WindowRequestForm onSubmit={handleWindowRequest} />
+            {requestMessage && (
+              <p className="muted" style={{ marginBottom: 0 }}>
+                {requestMessage}
+              </p>
+            )}
+          </section>
+        )}
 
         <section className="card" style={{ padding: "20px 0 4px 0" }}>
           <div

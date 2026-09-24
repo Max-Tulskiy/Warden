@@ -5,7 +5,10 @@ import type {
   EventRecord,
   FleetEvent,
   InventoryChange,
+  Me,
+  Operator,
   Policy,
+  Role,
   Task,
 } from "./types";
 
@@ -29,6 +32,17 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
   onUnauthorized = handler;
 }
 
+let onForbidden: (() => void) | null = null;
+
+/**
+ * Registers what to do when the server refuses an action for lack of the role.
+ * The signed-in person is not signed out -- only their role may have changed --
+ * so the panel uses it to reload the role and drop what is no longer allowed.
+ */
+export function setForbiddenHandler(handler: (() => void) | null): void {
+  onForbidden = handler;
+}
+
 async function request<T>(
   path: string,
   options: { method?: string; token?: string | null; body?: unknown } = {},
@@ -50,6 +64,9 @@ async function request<T>(
     // wrong current password on the password form is a 400 by design.
     if (response.status === 401 && options.token) {
       onUnauthorized?.();
+    }
+    if (response.status === 403 && options.token) {
+      onForbidden?.();
     }
     const detail = await response
       .json()
@@ -207,4 +224,44 @@ export function getInventoryChanges(
     `/agents/${agentId}/inventory/changes${query ? `?${query}` : ""}`,
     { token },
   );
+}
+
+export function getMe(token: string): Promise<Me> {
+  return request<Me>("/auth/me", { token });
+}
+
+export function listOperators(token: string): Promise<Operator[]> {
+  return request<Operator[]>("/operators", { token });
+}
+
+export function createOperator(
+  token: string,
+  account: { username: string; role: Role; password: string },
+): Promise<Operator> {
+  return request<Operator>("/operators", { method: "POST", token, body: account });
+}
+
+/** Sends only the fields that are given: a role, a status, or both. */
+export function updateOperator(
+  token: string,
+  operatorId: string,
+  changes: { role?: Role; status?: Operator["status"] },
+): Promise<Operator> {
+  return request<Operator>(`/operators/${operatorId}`, {
+    method: "PATCH",
+    token,
+    body: changes,
+  });
+}
+
+export function resetOperatorPassword(
+  token: string,
+  operatorId: string,
+  newPassword: string,
+): Promise<void> {
+  return request<void>(`/operators/${operatorId}/password`, {
+    method: "POST",
+    token,
+    body: { new_password: newPassword },
+  });
 }

@@ -10,7 +10,7 @@ import { stationStatus } from "../lib/stationStatus";
 import { useAuth } from "../state/authContext";
 
 export function AgentsPage() {
-  const { token } = useAuth();
+  const { token, role } = useAuth();
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [enrollmentToken, setEnrollmentToken] = useState<EnrollmentToken | null>(null);
@@ -74,15 +74,17 @@ export function AgentsPage() {
             </span>
           )}
         </div>
-        <button
-          className="btn-primary"
-          type="button"
-          onClick={handleCreateEnrollmentToken}
-          disabled={issuingToken}
-        >
-          <KeyIcon />
-          {issuingToken ? "Выпуск..." : "Выпустить токен"}
-        </button>
+        {role === "admin" && (
+          <button
+            className="btn-primary"
+            type="button"
+            onClick={handleCreateEnrollmentToken}
+            disabled={issuingToken}
+          >
+            <KeyIcon />
+            {issuingToken ? "Выпуск..." : "Выпустить токен"}
+          </button>
+        )}
       </div>
 
       {enrollmentToken && (

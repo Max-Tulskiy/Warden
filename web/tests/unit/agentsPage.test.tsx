@@ -3,16 +3,18 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { Role } from "../../src/api/types";
 import { AgentsPage } from "../../src/pages/AgentsPage";
 import { AuthContext } from "../../src/state/authContext";
 
-function renderAgentsPage() {
+function renderAgentsPage(role: Role | null = "admin") {
   return render(
     <MemoryRouter>
       <AuthContext.Provider
         value={{
           token: "operator-token",
           username: "admin",
+          role,
           setSession: vi.fn(),
         }}
       >
@@ -93,5 +95,46 @@ describe("AgentsPage", () => {
     expect(await screen.findByText("отключена")).toBeInTheDocument();
     expect(screen.getByText("в сети")).toBeInTheDocument();
     expect(screen.getByText("2 всего · 1 в сети")).toBeInTheDocument();
+  });
+
+  describe("enrollment tokens by role", () => {
+    const stubStations = () =>
+      vi.spyOn(globalThis, "fetch").mockImplementation(
+        vi.fn(async (input: RequestInfo | URL) => {
+          const path = input.toString();
+          if (path === "/api/v1/agents") {
+            return new Response(JSON.stringify([]), { status: 200 });
+          }
+          throw new Error(`unexpected request: ${path}`);
+        }),
+      );
+
+    it("offers the button to an administrator", async () => {
+      stubStations();
+
+      renderAgentsPage("admin");
+
+      expect(
+        await screen.findByRole("button", { name: /Выпустить токен/ }),
+      ).toBeInTheDocument();
+    });
+
+    it.each<[string, Role | null]>([
+      ["an observer", "viewer"],
+      ["a person whose role is not known yet", null],
+    ])(
+      "does not offer the button to %s, and still lists the stations",
+      async (_who, role) => {
+        const fetchMock = stubStations();
+
+        renderAgentsPage(role);
+
+        await screen.findByRole("heading", { name: "Станции" });
+        expect(
+          screen.queryByRole("button", { name: /Выпустить токен/ }),
+        ).not.toBeInTheDocument();
+        expect(fetchMock).toHaveBeenCalledWith("/api/v1/agents", expect.anything());
+      },
+    );
   });
 });

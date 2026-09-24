@@ -35,6 +35,20 @@ export interface FleetEvent extends EventRecord {
   hostname: string;
 }
 
+export type Role = "admin" | "viewer";
+
+export interface Me {
+  username: string;
+  role: Role;
+}
+
+export interface Operator {
+  id: string;
+  username: string;
+  role: Role;
+  status: "active" | "disabled";
+}
+
 export interface Policy {
   max_request_window_hours: number;
   enrollment_token_ttl_hours: number;

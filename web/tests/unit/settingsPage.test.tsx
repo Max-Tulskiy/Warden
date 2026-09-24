@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { Role } from "../../src/api/types";
 import { SettingsPage } from "../../src/pages/SettingsPage";
 import { AuthContext } from "../../src/state/authContext";
 
@@ -77,12 +78,12 @@ function stubApi(overrides: Overrides = {}) {
   return calls;
 }
 
-function renderSettingsPage() {
+function renderSettingsPage(role: Role | null = "admin") {
   const setSession = vi.fn();
   render(
     <MemoryRouter>
       <AuthContext.Provider
-        value={{ token: "operator-token", username: "admin", setSession }}
+        value={{ token: "operator-token", username: "admin", role, setSession }}
       >
         <SettingsPage />
       </AuthContext.Provider>
@@ -380,5 +381,45 @@ describe("SettingsPage stations", () => {
     expect(
       await screen.findByText("Не удалось изменить статус станции"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("SettingsPage by role", () => {
+  const requestedPaths = (fetchMock: ReturnType<typeof vi.spyOn>) =>
+    fetchMock.mock.calls.map(([input]) => new URL(String(input), "http://x").pathname);
+
+  it("gives an administrator the stations card", async () => {
+    stubApi();
+    renderSettingsPage("admin");
+
+    expect(await screen.findByRole("heading", { name: "Станции" })).toBeInTheDocument();
+    expect(await screen.findByText("WS-01")).toBeInTheDocument();
+  });
+
+  it.each<[string, Role | null]>([
+    ["an observer", "viewer"],
+    ["a person whose role is not known yet", null],
+  ])("keeps the stations card from %s but leaves the other cards", async (_who, role) => {
+    stubApi();
+    renderSettingsPage(role);
+
+    await screen.findByText("12 симв.");
+
+    expect(screen.queryByRole("heading", { name: "Станции" })).not.toBeInTheDocument();
+    expect(screen.queryByText("WS-01")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Смена пароля" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Сеансы" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Политика сервера" })).toBeInTheDocument();
+  });
+
+  it("does not fetch the station list for someone who cannot use it", async () => {
+    stubApi();
+    renderSettingsPage("viewer");
+    await screen.findByText("12 симв.");
+
+    const paths = requestedPaths(vi.mocked(globalThis.fetch) as never);
+
+    expect(paths).not.toContain("/api/v1/agents");
+    expect(paths).toContain("/api/v1/policy");
   });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { setUnauthorizedHandler } from "../api/client";
+import { getMe, setForbiddenHandler, setUnauthorizedHandler } from "../api/client";
+import type { Role } from "../api/types";
 import { AuthContext } from "./authContext";
 
 const TOKEN_KEY = "warden.token";
@@ -39,6 +40,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
   const [sessionEnded, setSessionEnded] = useState(false);
 
+  // The role is kept with the token it was loaded for, so signing in as someone
+  // else never shows the previous person's role while the new one is loading.
+  const [loadedRole, setLoadedRole] = useState<{ token: string; role: Role } | null>(null);
+  const [roleReloads, setRoleReloads] = useState(0);
+  const role = loadedRole && loadedRole.token === token ? loadedRole.role : null;
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    getMe(token)
+      .then((me) => {
+        if (!cancelled) setLoadedRole({ token, role: me.role });
+      })
+      .catch(() => {
+        // The session itself is judged by the 401 hook; a role that cannot be
+        // loaded just stays unknown, and nothing role-gated is offered.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, roleReloads]);
+
   const setSession = (session: Session | null) => {
     setTokenState(session?.token ?? null);
     setUsernameState(session?.username ?? null);
@@ -59,12 +82,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       writeStored(null);
       setSessionEnded(true);
     });
-    return () => setUnauthorizedHandler(null);
+    // A 403 means the person's role may have changed since the panel loaded it:
+    // reload it, and the navigation and controls follow.
+    setForbiddenHandler(() => setRoleReloads((count) => count + 1));
+    return () => {
+      setUnauthorizedHandler(null);
+      setForbiddenHandler(null);
+    };
   }, []);
 
   const value = useMemo(
-    () => ({ token, username, sessionEnded, setSession }),
-    [token, username, sessionEnded],
+    () => ({ token, username, sessionEnded, role, setSession }),
+    [token, username, sessionEnded, role],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

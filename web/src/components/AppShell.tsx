@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
+import type { Role } from "../api/types";
 import { useAuth } from "../state/authContext";
 import {
   AuditIcon,
@@ -9,18 +10,24 @@ import {
   SettingsIcon,
   ShieldIcon,
   StationsIcon,
+  UsersIcon,
 } from "./icons";
 
 function operatorInitials(username: string): string {
   return username.slice(0, 2).toUpperCase();
 }
 
+const ROLE_LABELS: Record<Role, string> = {
+  admin: "администратор",
+  viewer: "наблюдатель",
+};
+
 function navClassName({ isActive }: { isActive: boolean }): string {
   return isActive ? "shell-nav-item active" : "shell-nav-item";
 }
 
 export function AppShell({ children, narrow }: { children: ReactNode; narrow?: boolean }) {
-  const { username, setSession } = useAuth();
+  const { username, role, setSession } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -41,6 +48,11 @@ export function AppShell({ children, narrow }: { children: ReactNode; narrow?: b
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span className="shell-avatar">{operatorInitials(username)}</span>
                 <span className="text-secondary">{username}</span>
+                {role && (
+                  <span className="text-tertiary" style={{ fontSize: 12 }}>
+                    {ROLE_LABELS[role]}
+                  </span>
+                )}
               </div>
               <div style={{ width: 1, height: 18, background: "var(--border-default)" }} />
             </>
@@ -62,10 +74,18 @@ export function AppShell({ children, narrow }: { children: ReactNode; narrow?: b
             <ReportsIcon />
             Отчёты
           </NavLink>
-          <NavLink to="/audit" className={navClassName}>
-            <AuditIcon />
-            Журнал
-          </NavLink>
+          {role === "admin" && (
+            <NavLink to="/audit" className={navClassName}>
+              <AuditIcon />
+              Журнал
+            </NavLink>
+          )}
+          {role === "admin" && (
+            <NavLink to="/operators" className={navClassName}>
+              <UsersIcon />
+              Операторы
+            </NavLink>
+          )}
           <NavLink to="/settings" className={navClassName}>
             <SettingsIcon />
             Настройки

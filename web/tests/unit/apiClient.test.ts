@@ -3,20 +3,27 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   changePassword,
+  createOperator,
   getEvents,
   getFleetEvents,
   getInventoryChanges,
+  getMe,
   getPolicy,
   listAudit,
+  listOperators,
   login,
   logoutAll,
+  resetOperatorPassword,
   setAgentStatus,
+  setForbiddenHandler,
   setUnauthorizedHandler,
+  updateOperator,
 } from "../../src/api/client";
 
 afterEach(() => {
   vi.restoreAllMocks();
   setUnauthorizedHandler(null);
+  setForbiddenHandler(null);
 });
 
 function mockFetch(response: Response) {
@@ -305,5 +312,154 @@ describe("api client pagination", () => {
 
     const url = fetchMock.mock.calls[0][0]!.toString();
     expect(url).toBe("/api/v1/agents/agent-1/inventory/changes");
+  });
+});
+
+describe("getMe", () => {
+  it("reads who is signed in with the bearer token", async () => {
+    const me = { username: "admin", role: "admin" };
+    const fetchMock = mockFetch(new Response(JSON.stringify(me), { status: 200 }));
+
+    await expect(getMe("token")).resolves.toEqual(me);
+
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(input.toString()).toBe("/api/v1/auth/me");
+    expect(init?.headers).toMatchObject({ Authorization: "Bearer token" });
+  });
+});
+
+describe("operator management", () => {
+  const account = { id: "o-1", username: "colleague", role: "viewer", status: "active" };
+
+  it("lists the accounts", async () => {
+    const fetchMock = mockFetch(new Response(JSON.stringify([account]), { status: 200 }));
+
+    await expect(listOperators("token")).resolves.toEqual([account]);
+
+    expect(fetchMock.mock.calls[0][0].toString()).toBe("/api/v1/operators");
+  });
+
+  it("creates an account by posting the username, role and password", async () => {
+    const fetchMock = mockFetch(new Response(JSON.stringify(account), { status: 201 }));
+
+    await expect(
+      createOperator("token", {
+        username: "colleague",
+        role: "viewer",
+        password: "long-enough-password",
+      }),
+    ).resolves.toEqual(account);
+
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(input.toString()).toBe("/api/v1/operators");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toEqual({
+      username: "colleague",
+      role: "viewer",
+      password: "long-enough-password",
+    });
+  });
+
+  it("updates an account with only the fields it was given", async () => {
+    const fetchMock = mockFetch(
+      new Response(JSON.stringify({ ...account, role: "admin" }), { status: 200 }),
+    );
+
+    await updateOperator("token", "o-1", { role: "admin" });
+
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(input.toString()).toBe("/api/v1/operators/o-1");
+    expect(init?.method).toBe("PATCH");
+    expect(JSON.parse(init?.body as string)).toEqual({ role: "admin" });
+  });
+
+  it("resets a password by posting only the new one, and resolves on 204", async () => {
+    const fetchMock = mockFetch(new Response(null, { status: 204 }));
+
+    await expect(
+      resetOperatorPassword("token", "o-1", "another-long-passphrase"),
+    ).resolves.toBeUndefined();
+
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(input.toString()).toBe("/api/v1/operators/o-1/password");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toEqual({
+      new_password: "another-long-passphrase",
+    });
+  });
+
+  it("surfaces a duplicate name as an ApiError carrying the 409", async () => {
+    mockFetch(new Response(JSON.stringify({ detail: "exists" }), { status: 409 }));
+
+    const failure = await createOperator("token", {
+      username: "colleague",
+      role: "viewer",
+      password: "long-enough-password",
+    }).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ApiError);
+    expect((failure as ApiError).status).toBe(409);
+  });
+});
+
+describe("the forbidden handler", () => {
+  const refused = (status: number) =>
+    new Response(JSON.stringify({ detail: "Administrator role required" }), { status });
+
+  it("is called once when a request that carried a token is forbidden, which still throws", async () => {
+    const handler = vi.fn();
+    setForbiddenHandler(handler);
+    mockFetch(refused(403));
+
+    const failure = await listOperators("token").catch((error: unknown) => error);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(failure).toBeInstanceOf(ApiError);
+    expect((failure as ApiError).status).toBe(403);
+  });
+
+  it("is not called for a 403 that carried no token", async () => {
+    const handler = vi.fn();
+    setForbiddenHandler(handler);
+    mockFetch(refused(403));
+
+    await expect(login("admin", "pw")).rejects.toBeInstanceOf(ApiError);
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it.each([401, 404, 409, 422, 500])("is not called for a %i", async (status) => {
+    const handler = vi.fn();
+    setForbiddenHandler(handler);
+    mockFetch(refused(status));
+
+    await expect(listOperators("token")).rejects.toBeInstanceOf(ApiError);
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("does not fire for a successful response, or after it has been cleared", async () => {
+    const handler = vi.fn();
+    setForbiddenHandler(handler);
+    mockFetch(new Response(JSON.stringify([]), { status: 200 }));
+    await listOperators("token");
+    setForbiddenHandler(null);
+    mockFetch(refused(403));
+    await listOperators("token").catch(() => undefined);
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("does not disturb the unauthorized handler", async () => {
+    const forbidden = vi.fn();
+    const unauthorized = vi.fn();
+    setForbiddenHandler(forbidden);
+    setUnauthorizedHandler(unauthorized);
+    mockFetch(refused(401));
+
+    await listOperators("token").catch(() => undefined);
+
+    expect(unauthorized).toHaveBeenCalledTimes(1);
+    expect(forbidden).not.toHaveBeenCalled();
   });
 });
