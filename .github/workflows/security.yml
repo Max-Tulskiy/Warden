@@ -19,7 +19,13 @@ jobs:
   codeql:
     name: CodeQL (static analysis)
     runs-on: ubuntu-latest
+    # Listing a permission block resets every scope not named in it to
+    # "none". `analyze` reads the workflow run it belongs to, so without
+    # `actions: read` the upload of the results fails with "Resource not
+    # accessible by integration" (GitHub documents it as required on
+    # private repositories).
     permissions:
+      actions: read
       contents: read
       security-events: write
     strategy:
