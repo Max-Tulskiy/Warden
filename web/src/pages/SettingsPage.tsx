@@ -10,52 +10,11 @@ import {
 } from "../api/client";
 import type { Agent, Policy } from "../api/types";
 import { AppShell } from "../components/AppShell";
+import { PolicyCard } from "../components/PolicyCard";
 import { StatusPill } from "../components/StatusPill";
 import { validateNewPassword } from "../lib/passwordValidation";
 import { stationStatus } from "../lib/stationStatus";
 import { useAuth } from "../state/authContext";
-
-function formatHours(hours: number): string {
-  return `${hours} ч`;
-}
-
-function formatMinutes(minutes: number): string {
-  return minutes % 60 === 0 ? formatHours(minutes / 60) : `${minutes} мин`;
-}
-
-function formatCount(count: number): string {
-  return count.toLocaleString("ru-RU");
-}
-
-function policyRows(policy: Policy): { label: string; value: string }[] {
-  return [
-    {
-      label: "Максимальное окно запроса к агенту",
-      value: formatHours(policy.max_request_window_hours),
-    },
-    {
-      label: "Срок действия токена регистрации",
-      value: formatHours(policy.enrollment_token_ttl_hours),
-    },
-    {
-      label: "Срок действия сессии",
-      value: formatMinutes(policy.session_lifetime_minutes),
-    },
-    { label: "Минимальная длина пароля", value: `${policy.min_password_length} симв.` },
-    {
-      label: "Максимум событий в одном отчёте агента",
-      value: formatCount(policy.max_report_events),
-    },
-    {
-      label: "Максимум записей в снимке инвентаризации",
-      value: formatCount(policy.max_inventory_entries),
-    },
-    {
-      label: "Максимум записей на страницу отчёта",
-      value: formatCount(policy.max_page_size),
-    },
-  ];
-}
 
 function passwordErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -295,26 +254,7 @@ export function SettingsPage() {
           )}
         </section>
 
-        <section className="card">
-          <h2 style={{ margin: "0 0 14px 0", fontSize: 15, fontWeight: 600 }}>
-            Политика сервера
-          </h2>
-          {policyError && <p className="error">{policyError}</p>}
-          {!policy && !policyError && <p className="text-secondary">Загрузка...</p>}
-          {policy && (
-            <dl className="policy-list">
-              {policyRows(policy).map((row) => (
-                <div key={row.label} className="policy-row">
-                  <dt>{row.label}</dt>
-                  <dd className="mono">{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-          <p className="field-hint" style={{ marginBottom: 0 }}>
-            Значения задаются конфигурацией сервера и из панели не меняются.
-          </p>
-        </section>
+        <PolicyCard policy={policy} error={policyError} onChange={setPolicy} />
 
         {role === "admin" && (
           <section className="card" style={{ padding: "20px 0 4px 0" }}>

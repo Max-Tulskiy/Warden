@@ -4,6 +4,7 @@ import type {
   EnrollmentToken,
   EventRecord,
   FleetEvent,
+  EditablePolicy,
   InventoryChange,
   Me,
   Operator,
@@ -174,6 +175,16 @@ export function listAudit(
 
 export function getPolicy(token: string): Promise<Policy> {
   return request<Policy>("/policy", { token });
+}
+
+/** Saves all three limits; they apply from the next use. Administrators only. */
+export function savePolicy(token: string, values: EditablePolicy): Promise<Policy> {
+  return request<Policy>("/policy", { method: "PUT", token, body: values });
+}
+
+/** Forgets the saved policy, so the server's configured values apply again. */
+export function resetPolicy(token: string): Promise<Policy> {
+  return request<Policy>("/policy", { method: "DELETE", token });
 }
 
 /**

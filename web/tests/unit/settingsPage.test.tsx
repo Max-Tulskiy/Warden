@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,14 +7,25 @@ import type { Role } from "../../src/api/types";
 import { SettingsPage } from "../../src/pages/SettingsPage";
 import { AuthContext } from "../../src/state/authContext";
 
-const policy = {
+const defaults = {
   max_request_window_hours: 4,
   enrollment_token_ttl_hours: 24,
   session_lifetime_minutes: 480,
+};
+
+const policy = {
+  ...defaults,
   min_password_length: 12,
   max_report_events: 10_000,
   max_inventory_entries: 10_000,
   max_page_size: 2_000,
+  overridden: false,
+  defaults,
+  bounds: {
+    max_request_window_hours: { min: 1, max: 4 },
+    enrollment_token_ttl_hours: { min: 1, max: 168 },
+    session_lifetime_minutes: { min: 5, max: 1440 },
+  },
 };
 
 const lastSeen = new Date().toISOString();
@@ -37,6 +48,10 @@ interface Overrides {
   password?: () => Response;
   patch?: () => Response;
   logoutAll?: () => Response;
+  /** A response to force for a policy write; otherwise the write is applied. */
+  policyWrite?: () => Response;
+  /** Start with an administrator's saved policy in force. */
+  saved?: Record<string, number>;
 }
 
 /** Stubs every endpoint the page uses and records the writes it makes. */
@@ -45,12 +60,26 @@ function stubApi(overrides: Overrides = {}) {
     password: [] as { current_password: string; new_password: string }[],
     patch: [] as { id: string; status: string }[],
     logoutAll: 0,
+    policyWrites: [] as { method: string; body?: Record<string, number> }[],
   };
+  let currentPolicy = overrides.saved
+    ? { ...policy, ...overrides.saved, overridden: true }
+    : { ...policy };
   vi.spyOn(globalThis, "fetch").mockImplementation(
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = new URL(input.toString(), "http://x").pathname;
       const method = init?.method ?? "GET";
-      if (path === "/api/v1/policy") return json(policy);
+      if (path === "/api/v1/policy" && method === "GET") return json(currentPolicy);
+      if (path === "/api/v1/policy") {
+        const body = init?.body ? JSON.parse(init.body as string) : undefined;
+        calls.policyWrites.push({ method, body });
+        if (overrides.policyWrite) return overrides.policyWrite();
+        currentPolicy =
+          method === "PUT"
+            ? { ...currentPolicy, ...body, overridden: true }
+            : { ...currentPolicy, ...defaults, overridden: false };
+        return json(currentPolicy);
+      }
       if (path === "/api/v1/agents" && method === "GET") return json(stations);
       if (path === "/api/v1/auth/password" && method === "POST") {
         calls.password.push(JSON.parse(init?.body as string));
@@ -108,11 +137,26 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("SettingsPage policy", () => {
-  it("shows the server's limits, with units, and nothing editable", async () => {
+const WINDOW = "Максимальное окно запроса к агенту";
+const TOKEN = "Срок действия токена регистрации";
+const SESSION = "Срок действия сессии";
+const SAVED_MESSAGE =
+  "Политика сохранена. Новый предел окна действует для следующих запросов, срок сеанса — для новых входов, срок токена — для новых токенов; уже выданные сеансы, токены и запросы сохраняют свой срок.";
+
+const policyCard = () =>
+  screen.getByRole("heading", { name: "Политика сервера" }).closest("section")!;
+
+async function setField(label: string, value: string) {
+  const input = screen.getByLabelText(label);
+  await userEvent.clear(input);
+  await userEvent.type(input, value);
+}
+
+describe("SettingsPage policy for an observer", () => {
+  it("shows the limits in force with their units, and nothing editable", async () => {
     stubApi();
 
-    renderSettingsPage();
+    renderSettingsPage("viewer");
 
     const card = (await screen.findByRole("heading", { name: "Политика сервера" })).closest(
       "section",
@@ -121,14 +165,256 @@ describe("SettingsPage policy", () => {
       within(screen.getByText(label).closest("div")!).getByText(/\S/, {
         selector: "dd",
       });
-    expect(valueOf("Максимальное окно запроса к агенту")).toHaveTextContent("4 ч");
-    expect(valueOf("Срок действия токена регистрации")).toHaveTextContent("24 ч");
-    expect(valueOf("Срок действия сессии")).toHaveTextContent("8 ч");
+    expect(valueOf(WINDOW)).toHaveTextContent("4 ч");
+    expect(valueOf(TOKEN)).toHaveTextContent("24 ч");
+    expect(valueOf(SESSION)).toHaveTextContent("8 ч");
     expect(valueOf("Минимальная длина пароля")).toHaveTextContent("12 симв.");
     expect(valueOf("Максимум событий в одном отчёте агента")).toHaveTextContent(/10\s000/);
     expect(valueOf("Максимум записей на страницу отчёта")).toHaveTextContent(/2\s000/);
     expect(within(card).queryAllByRole("textbox")).toHaveLength(0);
     expect(within(card).queryAllByRole("spinbutton")).toHaveLength(0);
+    expect(within(card).queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("shows the saved values when an administrator saved a policy, and says only administrators change it", async () => {
+    stubApi({ saved: { max_request_window_hours: 2 } });
+
+    renderSettingsPage("viewer");
+
+    await screen.findByText("2 ч");
+    expect(
+      screen.getByText(/Изменять политику могут только администраторы/),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("SettingsPage policy editing", () => {
+  it("gives an administrator three inputs with units, ranges and the configured values", async () => {
+    stubApi();
+
+    renderSettingsPage("admin");
+
+    expect(await screen.findByLabelText(WINDOW)).toHaveValue(4);
+    expect(screen.getByLabelText(TOKEN)).toHaveValue(24);
+    expect(screen.getByLabelText(SESSION)).toHaveValue(480);
+    const card = within(policyCard());
+    expect(card.getByText("от 1 до 4 ч · по умолчанию: 4 ч")).toBeInTheDocument();
+    expect(card.getByText("от 1 до 168 ч · по умолчанию: 24 ч")).toBeInTheDocument();
+    expect(card.getByText("от 5 мин до 24 ч · по умолчанию: 8 ч")).toBeInTheDocument();
+    expect(card.getByRole("button", { name: "Сохранить" })).toBeInTheDocument();
+  });
+
+  it("keeps the limits that stay in the configuration as read-only rows, and says so", async () => {
+    stubApi();
+
+    renderSettingsPage("admin");
+
+    await screen.findByLabelText(WINDOW);
+    const card = within(policyCard());
+    expect(card.getByText("Минимальная длина пароля")).toBeInTheDocument();
+    expect(card.getByText("12 симв.")).toBeInTheDocument();
+    expect(
+      card.getByText(
+        /Пределы загрузки, размер страницы и минимальная длина пароля задаются конфигурацией сервера и из панели не меняются/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("says the server's configuration decides until something is saved, and offers no reset", async () => {
+    stubApi();
+
+    renderSettingsPage("admin");
+
+    await screen.findByLabelText(WINDOW);
+    const card = within(policyCard());
+    expect(
+      card.getByText("Действуют значения из конфигурации сервера"),
+    ).toBeInTheDocument();
+    expect(
+      card.queryByRole("button", { name: /Сбросить к значениям сервера/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("saves all three values and says what applies when", async () => {
+    const calls = stubApi();
+    renderSettingsPage("admin");
+    await screen.findByLabelText(WINDOW);
+
+    await setField(WINDOW, "2");
+    await setField(SESSION, "60");
+    await userEvent.click(within(policyCard()).getByRole("button", { name: "Сохранить" }));
+
+    expect(await screen.findByText(SAVED_MESSAGE)).toBeInTheDocument();
+    expect(calls.policyWrites).toEqual([
+      {
+        method: "PUT",
+        body: {
+          max_request_window_hours: 2,
+          enrollment_token_ttl_hours: 24,
+          session_lifetime_minutes: 60,
+        },
+      },
+    ]);
+  });
+
+  it("then shows a saved policy and offers to return to the server's values", async () => {
+    stubApi();
+    renderSettingsPage("admin");
+    await screen.findByLabelText(WINDOW);
+
+    await setField(WINDOW, "2");
+    await userEvent.click(within(policyCard()).getByRole("button", { name: "Сохранить" }));
+    await screen.findByText(SAVED_MESSAGE);
+
+    const card = within(policyCard());
+    expect(await card.findByText("Сохранена политика администратора")).toBeInTheDocument();
+    expect(card.getByLabelText(WINDOW)).toHaveValue(2);
+    expect(
+      card.getByRole("button", { name: "Сбросить к значениям сервера" }),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    [WINDOW, "5", /от 1 до 4 ч/],
+    [WINDOW, "0", /от 1 до 4 ч/],
+    [TOKEN, "169", /от 1 до 168 ч/],
+    [SESSION, "4", /от 5 мин до 24 ч/],
+    [SESSION, "1441", /от 5 мин до 24 ч/],
+    [WINDOW, "2.5", /целое число/],
+    [WINDOW, "", /целое число/],
+  ])("does not send %s = «%s», and names the range", async (label, value, message) => {
+    const calls = stubApi();
+    renderSettingsPage("admin");
+    await screen.findByLabelText(WINDOW);
+
+    if (value === "") {
+      await userEvent.clear(screen.getByLabelText(label));
+    } else {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    await userEvent.click(within(policyCard()).getByRole("button", { name: "Сохранить" }));
+
+    // The hint beside each field also names its range, so look at the error itself.
+    expect(await screen.findByText(message, { selector: ".error" })).toBeInTheDocument();
+    expect(calls.policyWrites).toEqual([]);
+  });
+
+  it("says a refused save lacked the rights", async () => {
+    stubApi({ policyWrite: () => json({ detail: "no" }, 403) });
+    renderSettingsPage("admin");
+    await screen.findByLabelText(WINDOW);
+
+    await userEvent.click(within(policyCard()).getByRole("button", { name: "Сохранить" }));
+
+    expect(await screen.findByText("Недостаточно прав")).toBeInTheDocument();
+  });
+
+  it("says the server refused the values when it answers 422", async () => {
+    stubApi({ policyWrite: () => json({ detail: "bad" }, 422) });
+    renderSettingsPage("admin");
+    await screen.findByLabelText(WINDOW);
+
+    await userEvent.click(within(policyCard()).getByRole("button", { name: "Сохранить" }));
+
+    expect(await screen.findByText(/Сервер отклонил значения/)).toBeInTheDocument();
+  });
+
+  it("reports a failed save without changing what is shown", async () => {
+    stubApi({ policyWrite: () => json({ detail: "boom" }, 500) });
+    renderSettingsPage("admin");
+    await screen.findByLabelText(WINDOW);
+    await setField(WINDOW, "2");
+
+    await userEvent.click(within(policyCard()).getByRole("button", { name: "Сохранить" }));
+
+    expect(await screen.findByText("Не удалось сохранить политику")).toBeInTheDocument();
+    expect(screen.queryByText(SAVED_MESSAGE)).not.toBeInTheDocument();
+  });
+});
+
+describe("SettingsPage policy reset", () => {
+  const saved = { max_request_window_hours: 2, session_lifetime_minutes: 60 };
+
+  it("asks first and sends nothing until confirmed", async () => {
+    const calls = stubApi({ saved });
+    renderSettingsPage("admin");
+    await screen.findByLabelText(WINDOW);
+
+    await userEvent.click(
+      within(policyCard()).getByRole("button", { name: "Сбросить к значениям сервера" }),
+    );
+
+    expect(
+      within(policyCard()).getByText(/Вернуть значения из конфигурации сервера/),
+    ).toBeInTheDocument();
+    expect(calls.policyWrites).toEqual([]);
+  });
+
+  it("names what the reset returns to", async () => {
+    stubApi({ saved });
+    renderSettingsPage("admin");
+    await screen.findByLabelText(WINDOW);
+
+    await userEvent.click(
+      within(policyCard()).getByRole("button", { name: "Сбросить к значениям сервера" }),
+    );
+
+    expect(
+      within(policyCard()).getByText(/окно 4 ч, токен 24 ч, сеанс 8 ч/),
+    ).toBeInTheDocument();
+  });
+
+  it("sends nothing when the reset is cancelled", async () => {
+    const calls = stubApi({ saved });
+    renderSettingsPage("admin");
+    await screen.findByLabelText(WINDOW);
+    await userEvent.click(
+      within(policyCard()).getByRole("button", { name: "Сбросить к значениям сервера" }),
+    );
+
+    await userEvent.click(within(policyCard()).getByRole("button", { name: "Отмена" }));
+
+    expect(calls.policyWrites).toEqual([]);
+    expect(screen.getByLabelText(WINDOW)).toHaveValue(2);
+  });
+
+  it("returns to the server's values once confirmed", async () => {
+    const calls = stubApi({ saved });
+    renderSettingsPage("admin");
+    await screen.findByLabelText(WINDOW);
+    await userEvent.click(
+      within(policyCard()).getByRole("button", { name: "Сбросить к значениям сервера" }),
+    );
+
+    await userEvent.click(
+      within(policyCard()).getByRole("button", { name: "Да, сбросить" }),
+    );
+
+    expect(
+      await screen.findByText("Значения возвращены к конфигурации сервера."),
+    ).toBeInTheDocument();
+    expect(calls.policyWrites).toEqual([{ method: "DELETE", body: undefined }]);
+    await waitFor(() => expect(screen.getByLabelText(WINDOW)).toHaveValue(4));
+    expect(screen.getByLabelText(SESSION)).toHaveValue(480);
+    expect(
+      within(policyCard()).queryByRole("button", { name: "Сбросить к значениям сервера" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("says a refused reset lacked the rights, and keeps the saved values", async () => {
+    stubApi({ saved, policyWrite: () => json({ detail: "no" }, 403) });
+    renderSettingsPage("admin");
+    await screen.findByLabelText(WINDOW);
+    await userEvent.click(
+      within(policyCard()).getByRole("button", { name: "Сбросить к значениям сервера" }),
+    );
+
+    await userEvent.click(
+      within(policyCard()).getByRole("button", { name: "Да, сбросить" }),
+    );
+
+    expect(await screen.findByText("Недостаточно прав")).toBeInTheDocument();
+    expect(screen.getByLabelText(WINDOW)).toHaveValue(2);
   });
 });
 

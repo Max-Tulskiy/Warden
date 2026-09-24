@@ -49,14 +49,29 @@ export interface Operator {
   status: "active" | "disabled";
 }
 
-export interface Policy {
+/** The three limits an administrator can change. */
+export interface EditablePolicy {
   max_request_window_hours: number;
   enrollment_token_ttl_hours: number;
   session_lifetime_minutes: number;
+}
+
+export interface Bounds {
+  min: number;
+  max: number;
+}
+
+/** The limits in force, plus what an administrator may do with the editable ones. */
+export interface Policy extends EditablePolicy {
   min_password_length: number;
   max_report_events: number;
   max_inventory_entries: number;
   max_page_size: number;
+  /** True when an administrator saved a policy; false when the server's configuration decides. */
+  overridden: boolean;
+  /** What the server's configuration gives the editable values, which a reset returns to. */
+  defaults: EditablePolicy;
+  bounds: Record<keyof EditablePolicy, Bounds>;
 }
 
 export interface AuditEntry {

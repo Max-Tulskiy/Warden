@@ -14,6 +14,8 @@ import {
   login,
   logoutAll,
   resetOperatorPassword,
+  resetPolicy,
+  savePolicy,
   setAgentStatus,
   setForbiddenHandler,
   setUnauthorizedHandler,
@@ -462,4 +464,66 @@ describe("the forbidden handler", () => {
     expect(unauthorized).toHaveBeenCalledTimes(1);
     expect(forbidden).not.toHaveBeenCalled();
   });
+});
+
+describe("policy writes", () => {
+  const values = {
+    max_request_window_hours: 2,
+    enrollment_token_ttl_hours: 12,
+    session_lifetime_minutes: 60,
+  };
+  const policy = {
+    ...values,
+    min_password_length: 12,
+    max_report_events: 10_000,
+    max_inventory_entries: 10_000,
+    max_page_size: 2_000,
+    overridden: true,
+    defaults: {
+      max_request_window_hours: 4,
+      enrollment_token_ttl_hours: 24,
+      session_lifetime_minutes: 480,
+    },
+    bounds: {
+      max_request_window_hours: { min: 1, max: 4 },
+      enrollment_token_ttl_hours: { min: 1, max: 168 },
+      session_lifetime_minutes: { min: 5, max: 1440 },
+    },
+  };
+
+  it("saves all three values with PUT and resolves to the policy in force", async () => {
+    const fetchMock = mockFetch(new Response(JSON.stringify(policy), { status: 200 }));
+
+    await expect(savePolicy("operator-token", values)).resolves.toEqual(policy);
+
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(input.toString()).toBe("/api/v1/policy");
+    expect(init?.method).toBe("PUT");
+    expect(init?.headers).toMatchObject({ Authorization: "Bearer operator-token" });
+    expect(JSON.parse(init?.body as string)).toEqual(values);
+  });
+
+  it("resets to the server's values with DELETE and resolves to the policy in force", async () => {
+    const back = { ...policy, ...policy.defaults, overridden: false };
+    const fetchMock = mockFetch(new Response(JSON.stringify(back), { status: 200 }));
+
+    await expect(resetPolicy("operator-token")).resolves.toEqual(back);
+
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(input.toString()).toBe("/api/v1/policy");
+    expect(init?.method).toBe("DELETE");
+    expect(init?.body).toBeUndefined();
+  });
+
+  it.each([403, 422])(
+    "surfaces a %i as an ApiError carrying the status",
+    async (status) => {
+      mockFetch(new Response(JSON.stringify({ detail: "no" }), { status }));
+
+      const failure = await savePolicy("token", values).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(ApiError);
+      expect((failure as ApiError).status).toBe(status);
+    },
+  );
 });

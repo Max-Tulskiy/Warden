@@ -1,12 +1,17 @@
 import { useState } from "react";
 
-import { validateWindow } from "../lib/windowValidation";
+import { hoursLimitLabel, MAX_WINDOW_HOURS, validateWindow } from "../lib/windowValidation";
 
 interface WindowRequestFormProps {
   onSubmit: (windowStart: string, windowEnd: string) => Promise<void>;
+  /** The window limit in force, from the server; four hours until it is known. */
+  maxHours?: number;
 }
 
-export function WindowRequestForm({ onSubmit }: WindowRequestFormProps) {
+export function WindowRequestForm({
+  onSubmit,
+  maxHours = MAX_WINDOW_HOURS,
+}: WindowRequestFormProps) {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -14,7 +19,7 @@ export function WindowRequestForm({ onSubmit }: WindowRequestFormProps) {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const validationError = validateWindow(start, end);
+    const validationError = validateWindow(start, end, maxHours);
     if (validationError) {
       setError(validationError);
       return;
@@ -61,7 +66,7 @@ export function WindowRequestForm({ onSubmit }: WindowRequestFormProps) {
         </p>
       ) : (
         <p className="field-hint" style={{ marginBottom: 0 }}>
-          Промежуток не должен превышать 4 часов
+          Промежуток не должен превышать {hoursLimitLabel(maxHours)}
         </p>
       )}
     </form>

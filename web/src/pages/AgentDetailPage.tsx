@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { getEvents, getInventoryChanges, requestWindow } from "../api/client";
+import { getEvents, getInventoryChanges, getPolicy, requestWindow } from "../api/client";
 import type { EventRecord, InventoryChange } from "../api/types";
 import { AppShell } from "../components/AppShell";
 import { ChangeTimeline } from "../components/ChangeTimeline";
@@ -28,6 +28,10 @@ export function AgentDetailPage() {
   const [changes, setChanges] = useState<InventoryChange[]>([]);
   const [hasMoreChanges, setHasMoreChanges] = useState(false);
   const [requestMessage, setRequestMessage] = useState<string | null>(null);
+  // The window limit in force, from the server. Until it is known, or if it
+  // cannot be loaded, the form uses the four-hour ceiling and the server still
+  // enforces the real limit.
+  const [windowLimit, setWindowLimit] = useState<number | undefined>(undefined);
 
   const loadEvents = () => {
     if (!token || !agentId) return;
@@ -69,6 +73,19 @@ export function AgentDetailPage() {
 
   useEffect(loadChanges, [token, agentId]);
 
+  useEffect(() => {
+    if (!token || role !== "admin") return;
+    let cancelled = false;
+    getPolicy(token)
+      .then((policy) => {
+        if (!cancelled) setWindowLimit(policy.max_request_window_hours);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [token, role]);
+
   const handleWindowRequest = async (windowStart: string, windowEnd: string) => {
     if (!token || !agentId) return;
     await requestWindow(token, agentId, windowStart, windowEnd);
@@ -102,7 +119,7 @@ export function AgentDetailPage() {
             <h2 style={{ margin: "0 0 14px 0", fontSize: 15, fontWeight: 600 }}>
               Запросить данные за промежуток
             </h2>
-            <WindowRequestForm onSubmit={handleWindowRequest} />
+            <WindowRequestForm onSubmit={handleWindowRequest} maxHours={windowLimit} />
             {requestMessage && (
               <p className="muted" style={{ marginBottom: 0 }}>
                 {requestMessage}

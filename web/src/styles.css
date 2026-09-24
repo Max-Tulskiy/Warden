@@ -414,6 +414,33 @@ button.btn-danger:hover {
   white-space: nowrap;
 }
 
+.policy-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 4px;
+  font-size: 13px;
+}
+
+.policy-edit label {
+  color: var(--text-secondary);
+}
+
+.policy-edit-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.policy-edit-control input {
+  width: 100%;
+}
+
+.policy-edit .field-hint {
+  grid-column: 1 / -1;
+}
+
 .confirm-inline {
   display: flex;
   align-items: center;
