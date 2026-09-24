@@ -18,6 +18,17 @@ export class ApiError extends Error {
   }
 }
 
+let onUnauthorized: (() => void) | null = null;
+
+/**
+ * Registers what to do when the server refuses a session. The client calls it,
+ * so every screen -- present and future -- returns the operator to sign-in
+ * without each one having to notice a 401 for itself.
+ */
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
+
 async function request<T>(
   path: string,
   options: { method?: string; token?: string | null; body?: unknown } = {},
@@ -34,6 +45,12 @@ async function request<T>(
   });
 
   if (!response.ok) {
+    // Only a request that carried a token can mean "the session is no longer
+    // valid": a sign-in with a wrong password is a 401 with no token, and a
+    // wrong current password on the password form is a 400 by design.
+    if (response.status === 401 && options.token) {
+      onUnauthorized?.();
+    }
     const detail = await response
       .json()
       .then((body: { detail?: string }) => body.detail)
@@ -142,16 +159,27 @@ export function getPolicy(token: string): Promise<Policy> {
   return request<Policy>("/policy", { token });
 }
 
-export function changePassword(
+/**
+ * Changes the signed-in operator's password. The server ends every session
+ * issued so far and returns a token for the new version, so the caller keeps
+ * this session by storing what this resolves to.
+ */
+export async function changePassword(
   token: string,
   currentPassword: string,
   newPassword: string,
-): Promise<void> {
-  return request<void>("/auth/password", {
+): Promise<string> {
+  const result = await request<{ access_token: string }>("/auth/password", {
     method: "POST",
     token,
     body: { current_password: currentPassword, new_password: newPassword },
   });
+  return result.access_token;
+}
+
+/** Ends every session of the signed-in operator, this one included. */
+export function logoutAll(token: string): Promise<void> {
+  return request<void>("/auth/logout-all", { method: "POST", token });
 }
 
 export function setAgentStatus(

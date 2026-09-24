@@ -6,7 +6,7 @@ import { ShieldIcon } from "../components/icons";
 import { useAuth } from "../state/authContext";
 
 export function LoginPage() {
-  const { setSession } = useAuth();
+  const { setSession, sessionEnded } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -48,6 +48,15 @@ export function LoginPage() {
         </div>
 
         <div className="login-divider" />
+
+        {sessionEnded && (
+          <p
+            role="status"
+            style={{ margin: 0, color: "var(--warning)", fontSize: 13, lineHeight: 1.5 }}
+          >
+            Сеанс завершён. Войдите снова.
+          </p>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <label>

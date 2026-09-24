@@ -5,6 +5,7 @@ import {
   changePassword,
   getPolicy,
   listAgents,
+  logoutAll,
   setAgentStatus,
 } from "../api/client";
 import type { Agent, Policy } from "../api/types";
@@ -67,7 +68,7 @@ function passwordErrorMessage(error: unknown): string {
 }
 
 export function SettingsPage() {
-  const { token } = useAuth();
+  const { token, username, setSession } = useAuth();
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [policyError, setPolicyError] = useState<string | null>(null);
   const [stations, setStations] = useState<Agent[] | null>(null);
@@ -79,6 +80,10 @@ export function SettingsPage() {
   const [changing, setChanging] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+
+  const [confirmingSessions, setConfirmingSessions] = useState(false);
+  const [endingSessions, setEndingSessions] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
 
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -128,18 +133,32 @@ export function SettingsPage() {
 
     setChanging(true);
     try {
-      await changePassword(token, currentPassword, newPassword);
+      // The server ended every session issued so far and handed back a token
+      // for the new version: storing it is what keeps this one signed in.
+      const renewed = await changePassword(token, currentPassword, newPassword);
+      setSession({ token: renewed, username: username ?? "" });
       setCurrentPassword("");
       setNewPassword("");
       setRepeatPassword("");
-      const lifetime = policy ? ` (${formatMinutes(policy.session_lifetime_minutes)})` : "";
-      setPasswordMessage(
-        `Пароль изменён. Уже выданные сессии остаются действительными до истечения срока${lifetime}.`,
-      );
+      setPasswordMessage("Пароль изменён. Остальные сеансы завершены.");
     } catch (error) {
       setPasswordError(passwordErrorMessage(error));
     } finally {
       setChanging(false);
+    }
+  };
+
+  const handleEndSessions = async () => {
+    if (!token) return;
+    setEndingSessions(true);
+    setSessionsError(null);
+    try {
+      await logoutAll(token);
+      // This session ended too; clearing it sends the operator to sign-in.
+      setSession(null);
+    } catch {
+      setSessionsError("Не удалось завершить сеансы");
+      setEndingSessions(false);
     }
   };
 
@@ -220,9 +239,47 @@ export function SettingsPage() {
           )}
           {policy && !passwordError && !passwordMessage && (
             <p className="field-hint" style={{ marginBottom: 0 }}>
-              Не короче {policy.min_password_length} символов. Смена пароля не завершает уже
-              выданные сессии.
+              Не короче {policy.min_password_length} символов. Смена пароля завершает все
+              остальные сеансы, а этот остаётся.
             </p>
+          )}
+        </section>
+
+        <section className="card">
+          <h2 style={{ margin: "0 0 14px 0", fontSize: 15, fontWeight: 600 }}>Сеансы</h2>
+          <p className="text-secondary" style={{ marginTop: 0 }}>
+            Завершение всех сеансов выведет вас из панели на всех устройствах, включая это,
+            и потребует войти заново.
+          </p>
+          {sessionsError && <p className="error">{sessionsError}</p>}
+          {confirmingSessions ? (
+            <div className="confirm-inline">
+              <span>Завершить все сеансы, включая этот?</span>
+              <button
+                className="btn-danger"
+                type="button"
+                disabled={endingSessions}
+                onClick={handleEndSessions}
+              >
+                Да, завершить
+              </button>
+              <button
+                className="btn-secondary"
+                type="button"
+                disabled={endingSessions}
+                onClick={() => setConfirmingSessions(false)}
+              >
+                Отмена
+              </button>
+            </div>
+          ) : (
+            <button
+              className="btn-secondary"
+              type="button"
+              onClick={() => setConfirmingSessions(true)}
+            >
+              Завершить все сеансы
+            </button>
           )}
         </section>
 

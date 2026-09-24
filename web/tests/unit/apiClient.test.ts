@@ -8,11 +8,15 @@ import {
   getInventoryChanges,
   getPolicy,
   listAudit,
+  login,
+  logoutAll,
   setAgentStatus,
+  setUnauthorizedHandler,
 } from "../../src/api/client";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  setUnauthorizedHandler(null);
 });
 
 function mockFetch(response: Response) {
@@ -125,16 +129,21 @@ describe("getPolicy", () => {
 });
 
 describe("changePassword", () => {
-  it("posts both passwords and resolves on 204", async () => {
-    const fetchMock = mockFetch(new Response(null, { status: 204 }));
+  it("posts both passwords and resolves to the token of the session it keeps", async () => {
+    const fetchMock = mockFetch(
+      new Response(JSON.stringify({ access_token: "new-token", token_type: "bearer" }), {
+        status: 200,
+      }),
+    );
 
-    await expect(
-      changePassword("token", "old-pass", "new-pass-123"),
-    ).resolves.toBeUndefined();
+    await expect(changePassword("token", "old-pass", "new-pass-123")).resolves.toBe(
+      "new-token",
+    );
 
     const [input, init] = fetchMock.mock.calls[0];
     expect(input.toString()).toBe("/api/v1/auth/password");
     expect(init?.method).toBe("POST");
+    expect(init?.headers).toMatchObject({ Authorization: "Bearer token" });
     expect(JSON.parse(init?.body as string)).toEqual({
       current_password: "old-pass",
       new_password: "new-pass-123",
@@ -154,6 +163,83 @@ describe("changePassword", () => {
 
     expect(failure).toBeInstanceOf(ApiError);
     expect((failure as ApiError).status).toBe(400);
+  });
+});
+
+describe("logoutAll", () => {
+  it("posts to logout-all with the bearer token and resolves on 204", async () => {
+    const fetchMock = mockFetch(new Response(null, { status: 204 }));
+
+    await expect(logoutAll("token")).resolves.toBeUndefined();
+
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(input.toString()).toBe("/api/v1/auth/logout-all");
+    expect(init?.method).toBe("POST");
+    expect(init?.headers).toMatchObject({ Authorization: "Bearer token" });
+  });
+});
+
+describe("the unauthorized handler", () => {
+  const refused = () =>
+    new Response(JSON.stringify({ detail: "Invalid or missing credentials" }), {
+      status: 401,
+    });
+
+  it("is called once when a request that carried a token is refused, which still throws", async () => {
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+    mockFetch(refused());
+
+    const failure = await getPolicy("token").catch((error: unknown) => error);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(failure).toBeInstanceOf(ApiError);
+    expect((failure as ApiError).status).toBe(401);
+  });
+
+  it("is not called when a sign-in with a wrong password is refused", async () => {
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+    mockFetch(
+      new Response(JSON.stringify({ detail: "Invalid username or password" }), {
+        status: 401,
+      }),
+    );
+
+    await expect(login("admin", "wrong")).rejects.toBeInstanceOf(ApiError);
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it.each([400, 403, 404, 429, 500])("is not called for a %i", async (status) => {
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+    mockFetch(new Response(JSON.stringify({ detail: "nope" }), { status }));
+
+    await expect(getPolicy("token")).rejects.toBeInstanceOf(ApiError);
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("is not called after it has been cleared", async () => {
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+    setUnauthorizedHandler(null);
+    mockFetch(refused());
+
+    await expect(getPolicy("token")).rejects.toBeInstanceOf(ApiError);
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("does not fire for a successful response", async () => {
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+    mockFetch(new Response(JSON.stringify({}), { status: 200 }));
+
+    await getPolicy("token");
+
+    expect(handler).not.toHaveBeenCalled();
   });
 });
 
