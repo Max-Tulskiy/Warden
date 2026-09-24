@@ -1,6 +1,6 @@
 # Spec: Session revocation
 
-**Directory:** `specs/004-session-revocation/` · **Branch:** `004-session-revocation` · **Status:** draft · **Date:** 2026-09-24
+**Directory:** `specs/004-session-revocation/` · **Branch:** `004-session-revocation` · **Status:** done · **Date:** 2026-09-24
 
 ---
 

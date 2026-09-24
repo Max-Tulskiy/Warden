@@ -1,6 +1,6 @@
 # Implementation plan: Session revocation
 
-**Spec:** [./spec.md](./spec.md) · **Status:** draft · **Date:** 2026-09-24
+**Spec:** [./spec.md](./spec.md) · **Status:** done · **Date:** 2026-09-24
 
 ---
 
@@ -163,7 +163,7 @@ change. The token carries `ver` (integer) in addition to `sub` and `exp`.
   sessions staying valid, and the lifetime it quoted, go away.
 * New card «Сеансы»: a sentence saying that ending all sessions signs the
   operator out on every device, this one included, and a «Завершить все сеансы»
-  button. It asks «Завершить все сеансы, включая этот?» inline, with «Завершить»
+  button. It asks «Завершить все сеансы, включая этот?» inline, with «Да, завершить»
   and «Отмена», before sending anything.
 
 **Sign-in.** After the server refuses a session, the sign-in screen shows
@@ -229,3 +229,33 @@ message; "end all sessions"; a token from before the upgrade refused after it.
 What this does not verify: behavior with several server processes (the counter
 lives in the database, so it should hold, but only one process ran), and browsers
 other than Chromium. Both are stated in `docs/{ru,en}/usage.md`.
+
+## 9. Deviations found during implementation
+
+* **The agent's test code did change, though its source did not.** The plan said
+  "no change", but the agent's integration fixture `operator_bearer_token` minted
+  an operator token with the old one-argument `create_access_token`, so four
+  agent integration tests errored once the version became required. The fixture
+  now builds the token from the operator's own `token_version`, as a real login
+  does. This is the plan's own last risk ("a caller that mints a token forgets
+  the version") showing up in a test.
+* **Earlier agent regression runs did not test the current server.** Installing
+  the agent with `pip install -e agent[dev]` pulled `warden-server` in as a
+  plain copy (`file:../server`) and replaced the editable install in the working
+  environment, so the agent suites run during 003 exercised the server as it
+  stood when that copy was made, not the working tree. That is why this error was
+  only found now. The environment was corrected (`pip install --no-deps -e
+  server` after the agent install), and the agent suite is run against the real
+  tree from here on.
+* `AuthContextValue.sessionEnded` is optional. The tests are not type-checked
+  (`tsconfig.app.json` covers `src` only), and ten of them build a context by
+  hand; making the field required would have meant editing all of them for no
+  behavioral reason. Absent means "not ended".
+* The confirmation button reads «Да, завершить», following «Да, отключить» in
+  the stations card, instead of the plan's «Завершить».
+* The server tests went beyond the plan's list where a case was cheap to pin:
+  two password changes in a row, and a check that the version is raised exactly
+  once per operation.
+* The migration was verified with an operator row that existed before it, on
+  SQLite and on PostgreSQL, and `alembic check` reports no drift between the
+  models and the migrations.
