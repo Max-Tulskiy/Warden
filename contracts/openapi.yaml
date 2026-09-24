@@ -281,13 +281,17 @@ paths:
       description: 'Change the signed-in operator''s own password.
 
 
-        Already-issued session tokens are stateless JWTs and keep working until
+        A successful change ends every session issued so far and returns a token
 
-        they expire; nothing here revokes them. Failed attempts are throttled
+        for the new version, so the session that made the change carries on while
 
-        under a key of their own, so a holder of a stolen token cannot use this
+        all the others are refused on their next request. A failed attempt ends
 
-        endpoint to lock the operator out of login.'
+        nothing. Failed attempts are throttled under a key of their own, so a
+
+        holder of a stolen token cannot use this endpoint to lock the operator out
+
+        of login.'
       operationId: change_password_api_v1_auth_password_post
       requestBody:
         content:
@@ -296,14 +300,30 @@ paths:
               $ref: '#/components/schemas/PasswordChangeIn'
         required: true
       responses:
-        '204':
+        '200':
           description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/auth/logout-all:
+    post:
+      tags:
+      - auth
+      summary: Logout All
+      description: End every session of the signed-in operator, this one included.
+      operationId: logout_all_api_v1_auth_logout_all_post
+      responses:
+        '204':
+          description: Successful Response
       security:
       - HTTPBearer: []
   /api/v1/agents:
