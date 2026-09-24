@@ -1,6 +1,6 @@
 # Warden Project Constitution
 
-**Version:** 1.0.3 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-24
+**Version:** 1.1.0 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-24
 
 This document defines the project's purpose, mandatory development principles,
 its structure, and the decisions already made. The constitution takes priority
@@ -336,6 +336,28 @@ tag), `security.yml` (static and composition analysis on a schedule and on
 push). The split mirrors common practice: the fast per-commit loop stays
 separate from the slower installer build and from the security pipeline.
 
+### D-9. Sessions are stateless tokens with a per-operator version
+
+An operator's session is a signed JWT that carries the `token_version` the
+operator had when it was issued. The server refuses a token whose version
+differs from the operator's current one, so raising that single integer ends
+every session of the operator at once. A password change does so for every
+session but the one it was made on, which is handed a token for the new
+version; an explicit "end all sessions" does so for all of them. The raise is
+one SQL statement, so two racing requests cannot both write the same value and
+lose a revocation. A token with no version is refused, which is how a session
+issued before this decision ends once, after the upgrade.
+
+Considered and rejected: a denylist of token ids, or a server-side session
+table (a lookup and cleanup on every request, to buy per-session revocation
+that nothing needs yet); comparing the token's issue time with a "valid after"
+timestamp (issue time has one-second resolution, so the token a password change
+returns is ambiguous against the revocation that produced it); short-lived
+tokens with a refresh token (a larger change than the problem warrants).
+
+Consequence: only all of an operator's sessions can be ended together, never one
+alone, and sessions are not listed. The boundary is stated in Section V.
+
 ---
 
 ## IV. Spec-driven development
@@ -408,9 +430,13 @@ What Warden does not do and does not promise:
   station whose window was never requested appears empty however much happened
   on it, and overlapping requests can store the same event twice, since events
   are not deduplicated on ingestion;
-* **changing an operator's password does not end sessions already issued** — a
-  session is a stateless JWT valid until it expires (8 hours by default), so a
-  stolen token keeps working after the password is changed;
+* **sessions can be ended only all at once, and only by their owner** — a
+  password change or an explicit "end all sessions" ends every session of that
+  operator (D-9), but one session cannot be listed or ended alone, and a stolen
+  token keeps working until one of those happens or it expires (8 hours by
+  default). Nothing detects a theft; ending sessions is the operator's response
+  to a suspicion. A session issued before that mechanism existed carries no
+  version and is refused once after the upgrade;
 * **the audit log is not a complete record** — it records actions that change
   something or authenticate someone. Reads (reports, station lists, the log
   itself) are not recorded, and neither are the requests a disabled station's
@@ -461,3 +487,4 @@ What Warden does not do and does not promise:
 | 1.0.1 | 2026-09-15 | PATCH: Section V gained a boundary noting that web-history collection is scoped to whichever account the agent service runs as, not every account on a shared machine — found while designing the systemd packaging (Section II, `packaging/systemd/`). No principle or decision changed |
 | 1.0.2 | 2026-09-20 | PATCH: Section V gained two boundaries surfaced while planning the panel's reports and settings (`specs/002-panel-reports-and-settings/`): the cross-station report shows only events delivered through window requests (and can show duplicates, since ingestion does not deduplicate), and a password change does not end sessions already issued. No principle or decision changed |
 | 1.0.3 | 2026-09-24 | PATCH: Section V gained two boundaries surfaced while planning the audit log viewer (`specs/003-audit-log-viewer/`): the log records changes and sign-ins, not reads or a disabled station's rejected requests, and it is append-only only by server code, not enforced by the database. No principle or decision changed |
+| 1.1.0 | 2026-09-24 | MINOR: added decision D-9 (sessions are stateless tokens carrying a per-operator version, so a password change or an explicit request ends them) and rewrote the Section V boundary that said a password change does not end sessions, which no longer holds; what remains true is that sessions can only be ended all at once and only by their owner. See `specs/004-session-revocation/` |
