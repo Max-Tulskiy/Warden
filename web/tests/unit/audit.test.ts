@@ -29,6 +29,7 @@ const EMITTED_ACTIONS = [
   "operator.password_change",
   "operator.password_change_failed",
   "operator.password_change_throttled",
+  "operator.sessions_revoked",
   "request.window",
 ];
 
