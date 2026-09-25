@@ -17,6 +17,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from typing import Final
 
 from warden_agent.buffer import Buffer
 from warden_agent.collectors.base import Collector, InventoryCollector
@@ -29,10 +30,33 @@ logger = logging.getLogger(__name__)
 #: reported separately (D-4), never as part of a window response.
 REPORTABLE_CATEGORIES = ("removable_media", "printing", "processes", "web")
 
+#: How many times the normal interval a failing tick's retry delay may grow
+#: to. A station left disabled fails every poll with a 401 forever; without
+#: a cap, geometric growth would eventually leave the agent waiting hours to
+#: notice it was re-enabled.
+MAX_BACKOFF_MULTIPLIER: Final = 16
+
 
 def validate_task_window(task: TaskDTO, max_hours: int) -> bool:
     """The agent's own half of the ≤N-hour check (constitution principle 3)."""
     return task.window_end - task.window_start <= timedelta(hours=max_hours)
+
+
+def backoff_delay(interval_seconds: int, *, consecutive_failures: int) -> int:
+    """How long a scheduled loop should wait before its next tick.
+
+    A single failed tick is treated as a blip and keeps the normal cadence;
+    from the second consecutive failure on, the delay doubles each time, up
+    to `MAX_BACKOFF_MULTIPLIER` times the interval -- so a station stuck
+    failing every tick (a disabled station polling into a 401, a server
+    that is down) stops hammering the server and filling the log once a
+    tick, while still checking back on its own once whatever was wrong is
+    fixed.
+    """
+    if consecutive_failures <= 1:
+        return interval_seconds
+    multiplier = min(2 ** (consecutive_failures - 1), MAX_BACKOFF_MULTIPLIER)
+    return interval_seconds * multiplier
 
 
 async def run_collection_pass(
@@ -153,12 +177,20 @@ class AgentScheduler:
     async def _loop(
         self, tick: Callable[[], Awaitable[None]], interval_seconds: int
     ) -> None:
+        consecutive_failures = 0
         while not self._stopping.is_set():
             try:
                 await tick()
             except Exception:
                 logger.exception("scheduled task failed, continuing on the next tick")
-            await self._sleep(interval_seconds)
+                consecutive_failures += 1
+            else:
+                consecutive_failures = 0
+            await self._sleep(
+                backoff_delay(
+                    interval_seconds, consecutive_failures=consecutive_failures
+                )
+            )
 
     async def _collection_tick(self) -> None:
         await run_collection_pass(

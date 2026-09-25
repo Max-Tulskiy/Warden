@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 from warden_agent.buffer import Buffer
 from warden_agent.core.models import OutgoingEvent, TaskDTO
 from warden_agent.core.scheduler import (
+    backoff_delay,
     run_collection_pass,
     run_inventory_pass,
     run_poll_pass,
@@ -30,6 +31,28 @@ def test_validate_task_window_accepts_exactly_the_cap():
 
 def test_validate_task_window_rejects_over_the_cap():
     assert not validate_task_window(_task(4.01), max_hours=4)
+
+
+def test_backoff_delay_is_the_plain_interval_without_a_failure():
+    assert backoff_delay(60, consecutive_failures=0) == 60
+
+
+def test_backoff_delay_does_not_grow_on_a_single_failure():
+    # One bad tick is treated as a blip, not the start of an outage.
+    assert backoff_delay(60, consecutive_failures=1) == 60
+
+
+def test_backoff_delay_grows_geometrically_with_repeated_failures():
+    assert backoff_delay(60, consecutive_failures=2) == 120
+    assert backoff_delay(60, consecutive_failures=3) == 240
+    assert backoff_delay(60, consecutive_failures=4) == 480
+
+
+def test_backoff_delay_is_capped():
+    # A disabled station (or any sustained outage) must not push the retry
+    # cadence out indefinitely -- it settles at 16x the normal interval.
+    assert backoff_delay(60, consecutive_failures=5) == 960
+    assert backoff_delay(60, consecutive_failures=20) == 960
 
 
 async def test_collection_pass_writes_events_and_prunes_old_ones(tmp_path):
