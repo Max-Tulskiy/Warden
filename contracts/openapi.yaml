@@ -377,7 +377,14 @@ paths:
       - reports
       summary: Daily Report
       description: 'Events received for the station on a given day (constitution:
-        daily reports).'
+        daily reports).
+
+
+        The view is recorded in the audit log as `view.daily_report`, under the
+
+        caller''s name, before any event is read; if the entry cannot be stored the
+
+        request fails and no data is returned.'
       operationId: daily_report_api_v1_agents__agent_id__events_get
       security:
       - HTTPBearer: []
@@ -446,7 +453,14 @@ paths:
 
         report ingestion; `id` breaks ties so offset paging stays stable when
 
-        several events share a timestamp.'
+        several events share a timestamp.
+
+
+        The view is recorded in the audit log as `view.fleet_report`, under the
+
+        caller''s name, before any event is read; if the entry cannot be stored the
+
+        request fails and no data is returned.'
       operationId: fleet_report_api_v1_events_get
       security:
       - HTTPBearer: []
@@ -520,6 +534,14 @@ paths:
       tags:
       - reports
       summary: Inventory Changes
+      description: 'Configuration changes detected for the station, newest first.
+
+
+        The view is recorded in the audit log as `view.inventory_changes`, under
+
+        the caller''s name, before any change is read; if the entry cannot be stored
+
+        the request fails and no data is returned.'
       operationId: inventory_changes_api_v1_agents__agent_id__inventory_changes_get
       security:
       - HTTPBearer: []
@@ -648,7 +670,11 @@ paths:
 
         ties so offset paging stays stable when several entries share a timestamp.
 
-        Reading the log is not itself recorded in it, like every other read.
+        Reading the log is itself recorded in it, as `view.audit_log`, before any
+
+        entry is read, so the entry for a read can appear in its own result; if it
+
+        cannot be stored the request fails and no data is returned.
 
 
         `action` is either one code or a dotted group: `operator.login` matches

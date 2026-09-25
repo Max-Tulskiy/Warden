@@ -10,7 +10,6 @@ ranges below sit weeks away from it and never see it.
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import func, select
 
 from warden_server.models.audit import AuditLogEntry
 
@@ -238,16 +237,6 @@ def test_a_garbage_token_is_unauthorized(client):
     response = _audit(client, {"Authorization": "Bearer not-a-token"})
 
     assert response.status_code == 401
-
-
-def test_reading_the_log_does_not_write_to_it(client, auth_headers, db_session):
-    before = db_session.execute(select(func.count(AuditLogEntry.id))).scalar_one()
-
-    _audit(client, auth_headers)
-    _audit(client, auth_headers, actor="admin", action="operator")
-
-    after = db_session.execute(select(func.count(AuditLogEntry.id))).scalar_one()
-    assert after == before
 
 
 def test_the_occurred_at_index_is_declared_on_the_table():

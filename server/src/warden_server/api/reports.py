@@ -13,6 +13,7 @@ from warden_server.db import get_db
 from warden_server.models.agent import Agent
 from warden_server.models.event import Event
 from warden_server.models.inventory import InventoryChange
+from warden_server.models.operator import Operator
 from warden_server.schemas.agent import AgentOut
 from warden_server.schemas.event import EventOut
 from warden_server.schemas.inventory import InventoryChangeOut
@@ -22,6 +23,7 @@ from warden_server.schemas.report import (
     ReportEventOut,
     ReportFilter,
 )
+from warden_server.services.audit import log_event
 
 router = APIRouter(
     prefix="/api/v1", tags=["reports"], dependencies=[Depends(require_operator)]
@@ -34,14 +36,32 @@ def list_agents(db: Session = Depends(get_db)) -> list[Agent]:
 
 
 @router.get("/agents/{agent_id}/events", response_model=list[EventOut])
-def daily_report(
+def daily_report(  # noqa: PLR0913, PLR0917 -- one parameter per query field and dependency
     agent_id: uuid.UUID,
     report_date: date = Query(default_factory=lambda: datetime.now(UTC).date()),
     limit: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     offset: int = Query(0, ge=0),
+    operator: Operator = Depends(require_operator),
     db: Session = Depends(get_db),
 ) -> list[Event]:
-    """Events received for the station on a given day (constitution: daily reports)."""
+    """Events received for the station on a given day (constitution: daily reports).
+
+    The view is recorded in the audit log as `view.daily_report`, under the
+    caller's name, before any event is read; if the entry cannot be stored the
+    request fails and no data is returned.
+    """
+    log_event(
+        db,
+        actor=operator.username,
+        action="view.daily_report",
+        target=str(agent_id),
+        detail={
+            "report_date": report_date.isoformat(),
+            "limit": limit,
+            "offset": offset,
+        },
+    )
+    db.commit()
     day_start = datetime.combine(report_date, datetime.min.time(), tzinfo=UTC)
     day_end = day_start + timedelta(days=1)
     return list(
@@ -63,7 +83,9 @@ def daily_report(
 
 @router.get("/events", response_model=list[ReportEventOut])
 def fleet_report(
-    report: Annotated[ReportFilter, Query()], db: Session = Depends(get_db)
+    report: Annotated[ReportFilter, Query()],
+    operator: Operator = Depends(require_operator),
+    db: Session = Depends(get_db),
 ) -> list[ReportEventOut]:
     """Events across stations for a time range, each labeled with its station.
 
@@ -72,7 +94,26 @@ def fleet_report(
     did. The range is half-open, `[start, end)`, like the window check on
     report ingestion; `id` breaks ties so offset paging stays stable when
     several events share a timestamp.
+
+    The view is recorded in the audit log as `view.fleet_report`, under the
+    caller's name, before any event is read; if the entry cannot be stored the
+    request fails and no data is returned.
     """
+    log_event(
+        db,
+        actor=operator.username,
+        action="view.fleet_report",
+        target="fleet",
+        detail={
+            "start": report.start.isoformat(),
+            "end": report.end.isoformat(),
+            "agent_id": [str(station) for station in report.agent_id],
+            "category": report.category.value if report.category else None,
+            "limit": report.limit,
+            "offset": report.offset,
+        },
+    )
+    db.commit()
     query = (
         select(Event, Agent.hostname)
         .join(Agent, Event.agent_id == Agent.id)
@@ -108,8 +149,23 @@ def inventory_changes(
     agent_id: uuid.UUID,
     limit: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     offset: int = Query(0, ge=0),
+    operator: Operator = Depends(require_operator),
     db: Session = Depends(get_db),
 ) -> list[InventoryChange]:
+    """Configuration changes detected for the station, newest first.
+
+    The view is recorded in the audit log as `view.inventory_changes`, under
+    the caller's name, before any change is read; if the entry cannot be stored
+    the request fails and no data is returned.
+    """
+    log_event(
+        db,
+        actor=operator.username,
+        action="view.inventory_changes",
+        target=str(agent_id),
+        detail={"limit": limit, "offset": offset},
+    )
+    db.commit()
     return list(
         db.execute(
             select(InventoryChange)
