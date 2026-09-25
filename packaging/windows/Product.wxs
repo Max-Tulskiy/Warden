@@ -15,9 +15,7 @@
   point), not warden_agent/__main__.py, which is a plain blocking CLI that
   does not speak the Windows Service Control Manager's protocol at all.
 -->
-<Wix
-  xmlns="http://wixtoolset.org/schemas/v4/wxs"
-  xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
     Name="Warden Agent"
     Manufacturer="Warden project"
@@ -56,18 +54,38 @@
       <Directory Id="WardenAppDataFolder" Name="Warden">
         <Directory Id="AgentAppDataFolder" Name="agent">
           <!--
+            This directory holds everything the agent keeps: the config,
+            which carries a live one-time enrollment token until the
+            operator removes it, and the state file with the agent's own
+            key, written by the service after enrollment (CWE-732, Codex
+            Security 2026-09-18). Under %ProgramData% ordinary Users would
+            inherit read access, so the directory gets a protected DACL
+            ("D:P", nothing inherited from above) granting full control to
+            SYSTEM (SY) and Administrators (BA) only, and everything the
+            service creates in it inherits that (OICI).
+
+            The rights are given by well-known SID in SDDL, through Windows
+            Installer's own MsiLockPermissionsEx, rather than by account
+            name: an account name such as "SYSTEM" or "Administrators" is
+            localized on a Russian Windows, and a name the installer cannot
+            resolve aborts the installation.
+
+            Unverified on a real Windows machine, like the rest of this
+            installer; see the file-level comment above.
+          -->
+          <Component Id="AgentDataFolder" Guid="a7c8ca87-2670-4457-822c-5c173fc0b53d">
+            <CreateFolder>
+              <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+            </CreateFolder>
+          </Component>
+
+          <!--
             NeverOverwrite: an upgrade must not clobber a config an
             administrator has already filled in with a real server_url and
             enrollment_token (or, after first enrollment, that no longer
-            even needs enrollment_token at all).
-
-            PermissionEx below replaces the inherited ACL (which grants
-            ordinary Users read access under %ProgramData%) with an
-            Administrators/SYSTEM-only one: until the operator deletes the
-            enrollment_token line after first enrollment, this file carries
-            a live one-time credential (CWE-732, Codex Security
-            2026-09-18). Unverified on a real Windows machine, like the
-            rest of this installer; see the file-level comment above.
+            even needs enrollment_token at all). The file carries the same
+            protected DACL as its directory, set on it directly so it does
+            not depend on the order in which the two are applied.
           -->
           <Component Id="DefaultConfig" Guid="6b8e2a1f-3c4d-4e9a-8f1b-9a2d6e5c7b3a" NeverOverwrite="yes">
             <File
@@ -75,8 +93,7 @@
               Source="$(var.WardenConfigExamplePath)"
               Name="config.toml"
               KeyPath="yes">
-              <util:PermissionEx User="SYSTEM" GenericAll="yes" />
-              <util:PermissionEx User="Administrators" GenericAll="yes" />
+              <PermissionEx Sddl="D:P(A;;FA;;;SY)(A;;FA;;;BA)" />
             </File>
           </Component>
         </Directory>
@@ -85,6 +102,7 @@
 
     <Feature Id="MainFeature" Title="Warden Agent" Level="1">
       <ComponentRef Id="ServiceExecutable" />
+      <ComponentRef Id="AgentDataFolder" />
       <ComponentRef Id="DefaultConfig" />
     </Feature>
   </Package>
