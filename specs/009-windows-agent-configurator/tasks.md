@@ -87,10 +87,10 @@
 
 ## Documentation (principle 9)
 
-- [ ] T-36. Update `docs/ru/usage.md` (canonical): Windows install through the wizard and silently, the window, comparing the fingerprint, changing the server, `ca_file` for other cases; leave the honest-status paragraph for T-46
-- [ ] T-37. Mirror T-36 in `docs/en/usage.md`, same section and same statements
-- [ ] T-38. Update `docs/ru/architecture.md`: the trust model, the endpoint and why it is open, the status and log files, and the boundaries mirrored from Section V
-- [ ] T-39. Mirror T-38 in `docs/en/architecture.md`
+- [x] T-36. Update `docs/ru/usage.md` (canonical): Windows install through the wizard and silently, the window, comparing the fingerprint, changing the server, `ca_file` for other cases; leave the honest-status paragraph for T-46
+- [x] T-37. Mirror T-36 in `docs/en/usage.md`, same section and same statements
+- [x] T-38. Update `docs/ru/architecture.md`: the trust model, the endpoint and why it is open, the status and log files, and the boundaries mirrored from Section V
+- [x] T-39. Mirror T-38 in `docs/en/architecture.md`
 
 ## Verification
 

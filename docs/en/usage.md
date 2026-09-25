@@ -22,6 +22,12 @@ What happens:
 3. The web panel is built and started.
 4. Caddy obtains a (self-signed, for `localhost`) TLS certificate and proxies
    `/api/*` to the server, everything else to the panel.
+5. A small `ca-export` service copies Caddy's certificate authority (the
+   certificate only, not the private key that sits beside it) to a volume of its
+   own, from which the server offers it to agents that do not trust the server
+   yet (see "Trusting the server's certificate"). With a certificate from a
+   public authority there is no such file, and the server has nothing to
+   publish.
 
 The panel is reachable at `https://localhost/` (the browser will warn about
 the self-signed certificate -- expected for a local/self-hosted deployment;
@@ -38,19 +44,95 @@ longer than needed.
 
 ## Enrolling an agent
 
-1. Log in to the panel and issue an enrollment token (from the panel, or
-   directly: `POST /api/v1/enrollment-tokens` with an
-   `Authorization: Bearer <JWT>` header).
-2. On the workstation, put that token in the agent config's
-   `enrollment_token` field before the first start. Until that field is
-   removed, the config carries a live one-time secret -- handle it like
-   one. Packages install `/etc/warden-agent/config.toml` at mode `0600`
-   inside a `0700` directory (Linux) and restrict the file to the
-   SYSTEM/Administrators accounts (Windows, unverified -- no test
-   machine).
-3. Once enrolled, the agent saves its issued key to `state.json` -- the
-   config's `enrollment_token` line must then be deleted by hand, it does
-   not disappear on its own and is no longer needed.
+1. Log in to the panel and, on the "Станции" (Stations) screen, press "Выпустить
+   токен" (issue a token) (or call `POST /api/v1/enrollment-tokens` with an
+   `Authorization: Bearer <JWT>` header). The token is one-time and valid for a
+   limited time. The same screen shows the administrator the **fingerprint of the
+   server's certificate (SHA-256)**, which will need comparing.
+2. Connect the station to the server one of these ways:
+   - **Windows** -- with the installer's wizard, a silent install, or the
+     "Warden Agent — настройка" (Warden Agent settings) window (see "Installing
+     the agent");
+   - **Linux and any platform with `pip`** -- with the `warden-agent-config`
+     command (below);
+   - or, as before, put the token in the config file's `enrollment_token` before
+     the first start. Until that line is removed, the config carries a live
+     one-time secret -- handle it like one. Packages install
+     `/etc/warden-agent/config.toml` at mode `0600` inside a `0700` directory
+     (Linux) and restrict the file to SYSTEM/Administrators (Windows).
+3. After a successful enrollment the agent saves the issued key in `state.json`,
+   together with the address of the server that issued it. A token entered in the
+   window or given to the installer is never written to disk; an
+   `enrollment_token` line put in the config by hand has to be removed by hand --
+   it is no longer needed and does not disappear on its own.
+
+A service that has neither a key nor a token does not exit with an error: it
+waits, rereading its configuration and its state every 30 seconds, and starts
+working as soon as the station is connected. What it is doing shows in the
+"Warden Agent — настройка" window (the `status.json` file next to the state):
+whether it is running or waiting and why, when it last reached the server
+successfully, and how the last failure ended.
+
+### Trusting the server's certificate
+
+In the shipped deployment the server's certificate is issued by Caddy's own
+certificate authority (`tls internal`), which workstations do not know, so the
+agent could not connect at all. A station is therefore offered to trust that
+authority, but only after a fingerprint has been compared:
+
+1. The window (or the command) sees that the server's certificate is not trusted
+   and asks the server for its certificate authority's certificate
+   (`GET /api/v1/tls/ca`). This is the one request the agent makes without
+   checking the certificate, and it carries neither a token nor a key.
+2. The station computes the SHA-256 of what it received itself (the value the
+   server sent is not used) and shows who issued it, until when it is valid, and
+   its fingerprint.
+3. The administrator compares the fingerprint with the one the panel shows beside
+   the token and confirms only if they match. The server is then checked against
+   that authority and not against the server's own certificate, which Caddy
+   reissues every few hours.
+4. The authority's certificate is saved as `server-ca.pem` in the agent's
+   directory and `ca_file` is added to the configuration. The trust belongs to the
+   agent alone: the Windows certificate store is not changed.
+
+A silent install and the command are given the fingerprint in advance
+(`SERVER_CA_SHA256`, `--ca-sha256`): the authority is accepted only if it matches,
+without asking, and without a fingerprint an unknown authority is not accepted at
+all.
+
+If the server's certificate is already trusted by the system (a public authority,
+or a corporate one distributed by group policy), nothing is asked and the window
+connects the station at once. If the server was rebuilt and now issues
+certificates from a new authority, the station can no longer verify it: the window
+says so and offers "Доверять новому сертификату" (trust the new certificate) --
+after the same comparison, with no new enrollment. A server with no authority of
+its own answers the request with 404; its certificate then has to be trusted by
+the system, or the authority named in `ca_file` by hand.
+
+### The command line
+
+```bash
+warden-agent-config --config /etc/warden-agent/config.toml --apply \
+    --server https://warden.example.internal --token <token> \
+    --ca-sha256 <fingerprint from the panel>
+```
+
+`--check --server <address>` only checks the address. The command asks nothing:
+without `--ca-sha256` an unknown authority is not accepted, and the fingerprint on
+offer is printed for comparing. `--replace` allows moving an already enrolled
+station to another server (trust given to the previous one is not carried over);
+`--no-restart` does not restart the service. Exit code 0 means the station is
+connected (or already was), 3 that it is not. Without `--config` the command does
+not know whose file to change. It is installed with `pip`; it is not in the built
+`.deb`/`.rpm` packages, where `ca_file` is written by hand: fetch the certificate
+(`curl -sk https://<server>/api/v1/tls/ca`), put the `pem` field in
+`/etc/warden-agent/server-ca.pem`, compare `openssl x509 -in ... -noout
+-fingerprint -sha256` with the panel, and add `ca_file =
+'/etc/warden-agent/server-ca.pem'` to the config.
+
+The token is passed on a command line, so while the command runs it is visible in
+the process list (and in the log of command-line auditing, where that is on). It is
+one-time and useless once used.
 
 ## Working in the panel
 
@@ -147,24 +229,67 @@ collected data of all stations -- they cannot be limited to particular stations.
 
 ### Windows 10/11 (`.msi`)
 
-Download the `.msi` from the release page and run it as an administrator. It
-installs the "Warden Insider-Activity Monitoring Agent" service (auto-start)
-and a default configuration at
-`%ProgramData%\Warden\agent\config.toml` -- edit it (server address,
-enrollment token) and restart the service:
+Download the `.msi` from the release page (or from the artifact of a manual run of
+the `Release` workflow in GitHub Actions) and run it as an administrator. The
+installer is a wizard in Russian:
+
+1. "Подключение к серверу" (connection to the server): the server address, the
+   enrollment token and, if the server issues its own certificate, the SHA-256
+   fingerprint of its certificate authority (shown in the panel beside the token).
+   All three fields are optional -- the station can be connected later.
+2. Installation: the "Warden Insider-Activity Monitoring Agent" service
+   (auto-start), the "Warden Agent — настройка" window (a `Configurator` folder and
+   a Start menu entry), a configuration at
+   `%ProgramData%\Warden\agent\config.toml`, and a notice file about third-party
+   software (Qt, PySide6, LGPLv3). If the fields are filled in, the installer
+   enrolls the station before the service starts, so the service comes up already
+   configured. A failed connection does not stop the installation -- the window can
+   connect the station.
+3. The last page offers to open the settings window.
+
+A silent install takes the same values as properties:
 
 ```powershell
-Restart-Service WardenAgent
+msiexec /i warden-agent-<version>.msi /qn `
+    SERVER_URL=https://warden.example.internal `
+    ENROLLMENT_TOKEN=<token> `
+    SERVER_CA_SHA256=<fingerprint from the panel>
 ```
 
-The agent keeps its event buffer (`buffer.db`) and its state with the
-agent key (`state.json`) in the same `%ProgramData%\Warden\agent`
-directory. The installer locks that directory down: only SYSTEM and
-Administrators have access, so ordinary users can read neither the config
-with its enrollment token nor the agent key. The rights are set by
-well-known SID, so the installation does not depend on the Windows
-language. Uninstalling the agent leaves these files in place -- remove the
-directory by hand if it is no longer needed.
+Without `SERVER_CA_SHA256` a server that issues its own certificate is not
+accepted: the install goes through, the station stays unenrolled, and the window
+lets you finish. An upgrade of the installer and a repair neither ask about nor
+change the connection.
+
+**The "Warden Agent — настройка" window** opens from the Start menu after a request
+for administrator rights: the agent's directory is closed to everyone else. It has
+the server address, the enrollment token, "Проверить соединение" (check the
+connection: the server is unreachable, answers but its certificate is not trusted,
+or is reachable and trusted), "Подключить" (connect), and a "Состояние" (state)
+block: the service, the agent, the station, the last exchange, the last error. For a
+server with its own certificate authority the window shows who issued it, its
+validity and its fingerprint, and asks for it to be compared with the panel. A
+station already enrolled with another server is moved only after a confirmation:
+the previous registration's key is forgotten, and trust given to the previous
+server is not carried over. Without administrator rights the fields are disabled
+and a note above them says why.
+
+A token given to the installer is visible for as long as it runs on the command
+line of its helper program (and in the log of command-line auditing); it should
+not reach the installer's verbose log (`/l*v`), but that has not been checked on a
+real machine. The token is one-time and useless once used.
+
+The default configuration holds neither a server address nor a token: the window or
+the installer writes them. The agent keeps its configuration, its event buffer
+(`buffer.db`), its state with the agent key (`state.json`), the certificate of the
+authority it trusts (`server-ca.pem`), its status (`status.json`) and the window's
+log (`configurator.log`: what was decided and how it ended, the fingerprint of an
+accepted certificate, never the token) in `%ProgramData%\Warden\agent`. The
+installer locks that directory down: only SYSTEM and Administrators have access, so
+ordinary users can read neither the config nor the agent key. The rights are set by
+well-known SID, so the installation does not depend on the Windows language.
+Uninstalling the agent leaves these files in place -- remove the directory by hand
+if it is no longer needed.
 
 > The installer is unsigned -- SmartScreen will warn on first run
 > (constitution Section V).
@@ -180,7 +305,8 @@ sudo rpm -i warden-agent-<version>.x86_64.rpm
 ```
 
 Both packages place the config at `/etc/warden-agent/config.toml` along with
-a systemd unit. Edit the config, then enable the service:
+a systemd unit. Edit the config (for a server that issues its own certificate see
+"Trusting the server's certificate"), then enable the service:
 
 ```bash
 sudo systemctl enable --now warden-agent

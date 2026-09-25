@@ -315,6 +315,68 @@ panel reads the role again, and what is no longer allowed disappears for a perso
 whose role was lowered while a screen was open. While the role is unknown, nothing
 that needs one is shown.
 
+## Connecting an agent and trusting the certificate
+
+A person connects an agent (constitution decision D-13): from a window on the
+station (Windows), from the installer's wizard or its properties, or with the
+`warden-agent-config` command on any platform. All of them are one operation,
+`configurator.logic.connect`: check the address, find out whether the server's
+certificate is trusted, if it is not fetch the certificate authority and wait for
+confirmation, enroll the station over a connection that trusts it, and **only after
+that succeeds** write the files -- the authority's certificate, the configuration,
+and last the state with the key. While the enrollment has not succeeded nothing on
+disk changes, and the token is never written: the station is either enrolled or
+exactly as it was. The state with the key also records the server that issued it: an
+agent configured for another server does not send a stranger's key, it waits.
+
+**How the agent verifies the server.** `core/transport.build_ssl_context` builds a
+context from the system's store (the `ssl` module loads the Windows store by itself),
+the `certifi` bundle (httpx used only that until now, and it is kept so trust does not
+narrow) and, when set, the `ca_file`. Nothing turns checking off except the single
+request for the authority (`fetch_authority`), since there would be nothing to check
+with otherwise. It carries neither a token nor a key, and its answer is used only
+after a fingerprint has been compared.
+
+**The endpoint.** `GET /api/v1/tls/ca` is open without a credential (the fourth such
+operation, after sign-in, enrollment and `/health`; a test checks the list) -- a
+station that has not enrolled yet has no credential. The server reads the certificate
+from the file `WARDEN_TLS_CA_PATH` at every request, because Caddy creates its
+authority later than the server may come up. Only the first `CERTIFICATE` block is
+returned, so a file with a private key beside it cannot give the key out; the
+fingerprint is the SHA-256 of the DER form. No path, no file, or no certificate in it
+is a 404. The request is not written to the audit log: it is public, and an anonymous
+caller could otherwise grow the log. The authority's private key lies in Caddy's data
+volume beside the certificate, so that volume is not mounted into the server: a
+`ca-export` service copies the certificate alone into a volume of its own, which the
+server gets read-only.
+
+**The fingerprint.** The station computes the SHA-256 of what it received itself and
+does not use the `sha256` value in the server's reply, so a person compares what the
+certificate really is. The panel shows the server's value beside the enrollment
+token. Trust is given to the certificate authority, not to the server's certificate,
+which Caddy reissues every few hours, and to the agent alone: the certificate is kept
+in its directory and the system's certificate store is not changed.
+
+**What lives where.** All in the agent's directory (`%ProgramData%\Warden\agent` on
+Windows): `config.toml` (the address and `ca_file`, never a token), `server-ca.pem`,
+`state.json`, `status.json` and `configurator.log`. The service writes `status.json`
+(a state code, the reason for waiting, the time of the last successful exchange, the
+kind of the last failure -- codes only, which the window turns into Russian text
+itself); the window reads it and the service's state.
+
+**Waiting to be configured.** An agent with neither a key nor a token does not exit;
+it rereads its configuration and state every 30 seconds (`wait_until_configured`), so
+a station starts working within a minute of being connected, with no restart.
+
+**The window and the installer.** The window uses PySide6: only
+`configurator/view.py` imports Qt, `controller.py` does not depend on it, and
+everything that depends on Windows (the service, `%ProgramData%`, the rights check) is
+in `configurator/windows.py` (principle 1). The frozen window is a folder, not one
+file: the Qt libraries stay separate, replaceable files (LGPLv3). After the files are
+copied and before the service starts, the installer calls `--apply` with the given
+properties; the result is ignored, so a failed connection does not fail the
+installation.
+
 ## Agent collectors
 
 Each event category has a platform backend selected at runtime
@@ -386,6 +448,20 @@ The full list is constitution Section V. The essentials:
   but not views of the station list, the policy, or the list of operators, not the
   session check, not refused requests to view, and not the rejections a disabled
   station receives;
+- the first trust of a server's own certificate authority rests on a person comparing
+  a fingerprint: an administrator who confirms without comparing, with an attacker in
+  the path at that moment, makes the station trust a false authority. A silent install
+  with no fingerprint trusts nothing, but nothing checks that the fingerprint given is
+  the right one; the fingerprint in the panel is read from the same server, so it
+  guards the path between a station and the server, not a compromised server;
+- the authority is renewed by nothing: Caddy's lasts ten years, and a rebuilt server
+  with a new one has to be trusted again at every station, by the same comparison. The
+  request for the authority is not written to the audit log;
+- the connection window exists only on Windows: a Linux station is connected by
+  editing its file or with the command, and both platforms save the same files;
+- the enrollment token can be read on a command line during an install that carries
+  it: in the process list while the installer's helper runs, and in the log of
+  command-line auditing where that is on. It is one-time and useless once used;
 - the audit log is not protected against edits: it is "append-only" only in how
   the server code uses it. There is no trigger or permission restriction in the
   database, so anyone with write access to PostgreSQL can change or delete rows,
