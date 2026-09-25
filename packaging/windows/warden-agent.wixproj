@@ -16,7 +16,7 @@
   <!--
     WardenVersion/WardenAgentExePath/WardenConfigExamplePath are passed on
     the command line by release.yml (`dotnet build -p:WardenVersion=...`),
-    derived from the release tag -- not hardcoded here, so this project
+    derived from the release tag, not hardcoded here, so this project
     file does not need editing for every release.
   -->
 </Project>
