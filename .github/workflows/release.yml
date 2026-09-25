@@ -102,9 +102,14 @@ jobs:
         run: >
           pyinstaller --onefile --name warden-agent
           --distpath ../dist src/warden_agent/__main__.py
+      # A pinned release: the asset name carries the version, so there is no
+      # stable "latest" URL to download, and a build that fetched whatever
+      # is newest would change without a commit in this repository.
       - name: Install nfpm
+        env:
+          NFPM_TOOL_VERSION: "2.47.0"
         run: |
-          curl -sSfL https://github.com/goreleaser/nfpm/releases/latest/download/nfpm_amd64.deb -o /tmp/nfpm.deb
+          curl -sSfL "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_TOOL_VERSION}/nfpm_${NFPM_TOOL_VERSION}_amd64.deb" -o /tmp/nfpm.deb
           sudo dpkg -i /tmp/nfpm.deb
       - name: Build .deb and .rpm
         working-directory: packaging/nfpm
