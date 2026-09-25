@@ -4,6 +4,15 @@
     <OutputType>Package</OutputType>
   </PropertyGroup>
 
+  <!--
+    A property given as -p:Name=value is only an MSBuild property. Product.wxs
+    reads $(var.Name), a WiX preprocessor variable, and those come from
+    DefineConstants alone, so each value is handed over here by name.
+  -->
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);WardenVersion=$(WardenVersion);WardenAgentExePath=$(WardenAgentExePath);WardenConfigExamplePath=$(WardenConfigExamplePath)</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="Product.wxs" />
   </ItemGroup>
