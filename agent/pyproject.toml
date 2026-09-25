@@ -23,6 +23,13 @@ linux = [
 windows = [
     "pywin32>=306; sys_platform == 'win32'",
 ]
+# The connection window (warden_agent.configurator.view). The Essentials
+# distribution carries QtCore, QtGui and QtWidgets, which is all the window
+# uses, at a fraction of the size of the full PySide6 package. Cross-platform,
+# so the window can be built and tested off screen on every CI leg.
+gui = [
+    "PySide6-Essentials>=6.7",
+]
 lint = [
     "ruff>=0.6",
     "mypy>=1.11",
@@ -33,6 +40,10 @@ testing = [
     "pytest-cov>=5.0",
     "pytest-asyncio>=0.24",
     "diff-cover>=9.1",
+    "pytest-qt>=4.4",
+    # Issues the throwaway certificate authority and certificates the TLS tests
+    # run against (a real handshake on localhost, never a system store).
+    "trustme>=1.1",
     # Test-only, never a runtime dependency of the distributed agent package
     # (production `dependencies` above has no reference to it): the
     # integration suite drives the real server app in-process over
@@ -41,10 +52,11 @@ testing = [
     # fixtures on each side (constitution principle 11).
     "warden-server @ file:../server",
 ]
-dev = ["warden-agent[lint,testing,linux,windows]"]
+dev = ["warden-agent[lint,testing,linux,windows,gui]"]
 
 [project.scripts]
 warden-agent = "warden_agent.__main__:main"
+warden-agent-config = "warden_agent.configurator.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
