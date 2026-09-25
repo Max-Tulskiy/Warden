@@ -223,9 +223,9 @@ paths:
 
         holds the window to the limit in force, which an administrator may have
 
-        lowered, and confirms the target agent exists. A request placed before the
+        lowered, and confirms the target agent exists and is still active. A
 
-        limit was lowered stays as it was placed.'
+        request placed before the limit was lowered stays as it was placed.'
       operationId: create_window_request_api_v1_agents__agent_id__requests_post
       security:
       - HTTPBearer: []

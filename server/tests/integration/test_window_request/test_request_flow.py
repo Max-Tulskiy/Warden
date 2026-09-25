@@ -81,6 +81,29 @@ def test_a_window_over_four_hours_is_rejected_when_placing_a_request(
     assert response.status_code == 422
 
 
+def test_a_window_request_for_a_disabled_station_is_rejected(
+    client, auth_headers, enrolled_agent
+):
+    """A disabled station never polls, so a queued task would just sit there."""
+    agent_id = enrolled_agent["agent_id"]
+    client.patch(
+        f"/api/v1/agents/{agent_id}", headers=auth_headers, json={"status": "disabled"}
+    )
+    window_start = datetime(2026, 1, 1, tzinfo=UTC)
+
+    response = client.post(
+        f"/api/v1/agents/{agent_id}/requests",
+        headers=auth_headers,
+        json={
+            "window_start": window_start.isoformat(),
+            "window_end": (window_start + timedelta(hours=2)).isoformat(),
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Station is disabled"
+
+
 def test_reporting_against_an_unknown_task_is_rejected(
     client, agent_headers, enrolled_agent
 ):
