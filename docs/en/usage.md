@@ -530,3 +530,39 @@ timer. What this does **not** prove: how the log behaves under a large number of
 (there is no retention or pruning, and a row per view); a failed write on a real
 database (only `pytest` with the write replaced covers it); and there was only one
 browser -- Chromium.
+
+Separately, for connecting a station (`specs/009-windows-agent-configurator/`). Checked on
+a real stack (`docker compose`: Caddy + PostgreSQL 16, a separate project with fresh
+volumes, ports 8443/8080) from macOS: `GET /api/v1/tls/ca` returns Caddy's root
+certificate, and its fingerprint equals what `openssl x509 -fingerprint -sha256` prints
+for `root.crt`; the server container sees only `root.crt` and neither Caddy's data
+volume nor the private key; `warden-agent-config --apply` with a wrong fingerprint and
+with none trusts nothing and stores nothing (with none it prints the one on offer), and
+with the right one connects the station and stores the configuration, the certificate, the
+state and the log, with the token in none of the files; moving an enrolled station to
+another server without `--replace` is refused; an agent started from another directory
+reaches the server over verified TLS, `status.json` shows a successful exchange, and the
+station appears in the list; an agent with neither key nor token does not exit, it waits
+and says why. In the browser (Chromium under Playwright) the fingerprint on the "Станции"
+(Stations) screen equals `openssl`'s. The PySide6 window, run on the same machine with no
+screen (Qt's `offscreen` platform) against the same stack, passes the address check, the
+trust dialog with the real fingerprint, and the connection through the real worker
+thread; its look was captured in each state. The run found two errors the unit tests had
+not seen, both fixed: checking an address by `/health` did not work behind the proxy (only
+`/api/*` reaches the server), and an agent looked for its state where the window had not
+saved it when the configuration had no `state_path`.
+
+What this does **not** prove -- and without which the Windows part cannot be called
+verified: the installer's wizard, a silent install with properties, an upgrade and a repair,
+the Start menu entry, the administrator-rights prompt, restarting the real service, and
+the `pywin32` and `ctypes` calls run on stand-in modules and are built only in CI
+(`release.yml`); they have not met a real Windows 10/11. The WiX sources were parsed on
+Linux, and only CI builds the full `.msi`; freezing PySide6 with PyInstaller and starting the
+frozen window are checked by the `--selftest` step only on the workflow's first run; the size
+of the installer with Qt is unknown until the first build; how the window looks on Windows
+(fonts, display scaling) is unknown; it has not been checked that the token's value stays out
+of the installer's verbose log, or that the properties are substituted into the deferred
+action's command line as written; and there was one browser -- Chromium. The maintainer's
+manual pass on Windows 10/11 is the last task of
+`specs/009-windows-agent-configurator/tasks.md`; until it is done the spec stays open.
+

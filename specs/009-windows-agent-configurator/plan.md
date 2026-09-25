@@ -92,8 +92,11 @@ the pure parts are tested anywhere.
 
 **Operations in `logic.py`** (async, reusing `ServerClient` and `EnrollmentError`):
 
-* `probe(server_url, extra_ca_pem=None)`: `GET /health` with the verifying
-  context. It sorts the outcome into *unreachable*, *certificate not trusted*
+* `probe(server_url, ca_file=None, extra_ca_pem=None)`: `GET /api/v1/tls/ca` with the
+  verifying context (not `/health`: behind the deployment's proxy only `/api/*`
+  reaches the server, and `/health` is answered by the panel -- found by running the
+  tool against a real stack). A reply counts as the server's if it is the authority
+  or the 404 of a deployment without one, both JSON in the server's own shape. It sorts the outcome into *unreachable*, *certificate not trusted*
   (a `httpx.ConnectError` whose cause chain holds `ssl.SSLCertVerificationError`),
   *unexpected reply*, or *reachable and trusted* (R-3, A-6).
 * `fetch_authority(server_url)`: the one request made without checking the
@@ -134,6 +137,12 @@ the whole surface stays Russian (R-17). Without
 elevation (`is_elevated()` false) the fields are disabled and a banner says why
 (R-12, A-9). The frozen exe also carries a manifest that asks for elevation, so
 opening it from the Start menu shows the UAC prompt first.
+
+**Paths.** `AgentPaths` follows the configuration: the agent reads its state from
+`state_path`, which on Linux is not beside the configuration file, so the tool writes
+the state there and reads the status file from beside it, and writes `state_path` into
+the configuration when it is missing, since the agent's own default is relative to
+where it is started.
 
 **The CLI** (`--apply`) is what the installer calls, and it works on any
 platform over `--config PATH`:
