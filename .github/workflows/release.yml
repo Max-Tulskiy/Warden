@@ -136,10 +136,14 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev]" pyinstaller
         working-directory: agent
+      # win32timezone is imported by pywin32 from its C code at run time,
+      # where PyInstaller's import analysis cannot see it; a frozen service
+      # without it fails the first time pywin32 converts a time value.
       - name: Freeze warden-agent service
         working-directory: agent
         run: >
           pyinstaller --onefile --name warden-agent
+          --hidden-import win32timezone
           --distpath ../dist src/warden_agent/service/windows.py
       - uses: actions/setup-dotnet@v4
         with:
