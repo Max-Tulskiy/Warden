@@ -30,10 +30,10 @@
 
 ## Documentation (R-9)
 
-- [ ] T-9. Update `docs/ru/architecture.md` (canonical): the audit log section states that views of the daily report, the cross-station report, the inventory history, and the log itself are recorded under the `view` group, written before the data is returned; the Boundaries bullet on the audit log's completeness now says which reads are recorded and that the station list, the policy, the list of operators, the session check, and rejected requests are not
-- [ ] T-10. Mirror T-9 in `docs/en/architecture.md`, same section and same statements
-- [ ] T-11. Update `docs/ru/usage.md`: the audit log paragraph describes the views group and that the entry for the view on screen can appear in its own result; leave the honest-status paragraph for T-19
-- [ ] T-12. Mirror T-11 in `docs/en/usage.md`
+- [x] T-9. Update `docs/ru/architecture.md` (canonical): the audit log section states that views of the daily report, the cross-station report, the inventory history, and the log itself are recorded under the `view` group, written before the data is returned; the Boundaries bullet on the audit log's completeness now says which reads are recorded and that the station list, the policy, the list of operators, the session check, and rejected requests are not
+- [x] T-10. Mirror T-9 in `docs/en/architecture.md`, same section and same statements
+- [x] T-11. Update `docs/ru/usage.md`: the audit log paragraph describes the views group and that the entry for the view on screen can appear in its own result; leave the honest-status paragraph for T-19
+- [x] T-12. Mirror T-11 in `docs/en/usage.md`
 - [x] T-13. Amend `.specify/memory/constitution.md` to 1.4.0 (MINOR) through the Section VII procedure: add decision D-12 (views of collected data and of the log are recorded, before they are answered, under their own group; the station list, the policy, the list of operators, and the session check are not), rewrite the Section V boundary on unrecorded reads, add a version-history row, and update the "last amended" date; the documents made stale by it are those covered by T-9…T-12
 
 ## Verification

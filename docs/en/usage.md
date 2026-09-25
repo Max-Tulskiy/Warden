@@ -113,9 +113,15 @@ matched exactly) and by action: one specific action or a group, for example "В�
 the password, choose "Неудачный вход оператора" (failed operator login). A station
 id is shown as the station's hostname when the station list has loaded. If more
 entries match than fit on a page, "Показать ещё" (show more) loads the next ones.
-The log records changes and sign-ins, but not reads and not the rejections a
-disabled station receives, and anyone with database access can alter its
-entries -- the hint under the filters says the same.
+Views of collected data (the daily report, the cross-station report, the
+configuration-change history, and the log itself) are recorded in the group
+"Просмотры данных" (data views): choose it in the action filter to see who looked
+at what. The entry is written before the data is returned, so the entry for the
+current view of the log can appear in its own result -- that is not a fault. The
+log does not record views of the station list, the policy, or the list of
+operators, refused requests to view, or the rejections a disabled station
+receives, and anyone with database access can alter its entries -- the hint under
+the filters says the same.
 
 **Operators and roles.** Every account has one of two roles. An **administrator**
 can do everything: request data from stations, issue enrollment tokens, enable and

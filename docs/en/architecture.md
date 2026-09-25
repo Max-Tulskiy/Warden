@@ -67,7 +67,7 @@ connection is not workable in practice.
 | `inventory_changes` | Separate records of detected changes (added/removed/modified) |
 | `operators` | Panel accounts: a role (`role`: administrator or observer), a status (`status`: active or disabled), and `token_version`, the counter whose increase ends all of an operator's sessions |
 | `policy_overrides` | The policy an administrator saved: the window limit, the enrollment token lifetime, and the session lifetime as one set (at most one row; no row means the server's configuration applies) |
-| `audit_log` | Every notable action: enrollment, task dispatch, login, configuration changes; read in the panel on the "Журнал" (audit log) screen |
+| `audit_log` | Every notable action: enrollment, task dispatch, login, configuration changes, views of collected data; read in the panel on the "Журнал" (audit log) screen |
 
 ### Configuration-change detector
 
@@ -149,6 +149,21 @@ detected configuration change, an operator's login and password change, a
 window request, an enrollment-token issue, and disabling or enabling a station.
 The log can be read in the panel ("Журнал") or through `GET /api/v1/audit`.
 
+Views of collected data are written too, under their own group, `view`:
+`view.daily_report` (a station's report for a day), `view.fleet_report` (the
+cross-station report), `view.inventory_changes` (the configuration-change
+history), and `view.audit_log` (the log itself). An entry holds the operator's
+name, the station (the words `fleet` and `audit_log` for the cross-station report
+and the log), and the request's parameters; a later page of results carries its
+`offset`. An observer's views are written exactly like an administrator's. The
+entry is written and committed before the data is read: a view is never answered
+without its entry (if it cannot be stored, the request fails and returns nothing),
+and the entry for the view on screen can appear in that same result. A refused
+request -- no session, a role that is not allowed, or invalid parameters -- is
+not a view and leaves no entry. The station list, the policy, the list of
+operators, and the session check (`GET /api/v1/auth/me`) are not written. The log
+grows by a row per view; it has no retention or pruning.
+
 Query parameters: `start` and `end` (required), `actor`, `action`,
 `limit`/`offset`. The range is half-open, `[start, end)`, like the cross-station
 report. Rows are ordered newest first, by `(occurred_at DESC, id)`, so paging
@@ -166,7 +181,8 @@ The panel shows actions under Russian names; a code with no name (for example,
 one added by a newer server version) is shown as it is, so an entry is never
 hidden. A station id in the "Кто" (who) and "Объект" (target) columns is replaced
 by the station's hostname when the station list has loaded. Reading the log is
-not itself written to it, like every other read in the panel.
+written to it (`view.audit_log`), so the entry for the view on screen can appear in
+its own result: that is not a fault.
 
 ## Authentication
 
@@ -365,8 +381,10 @@ The full list is constitution Section V. The essentials:
   than the reset to the configuration;
 - a saved policy outranks the server's configuration until it is reset: after the
   first save, editing the configuration alone does not change these three values;
-- the audit log is incomplete: it records changes and sign-ins, but not reads
-  (reports, station lists, the log itself) and not the rejections a disabled
+- the audit log is incomplete: it records changes, sign-ins, and views of the daily
+  and cross-station reports, the configuration-change history, and the log itself,
+  but not views of the station list, the policy, or the list of operators, not the
+  session check, not refused requests to view, and not the rejections a disabled
   station receives;
 - the audit log is not protected against edits: it is "append-only" only in how
   the server code uses it. There is no trigger or permission restriction in the
