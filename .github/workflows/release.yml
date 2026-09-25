@@ -54,13 +54,18 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # A registry refuses upper case in an image name, while the owner and
+      # repository names in github.repository keep the case they were
+      # created with.
+      - id: image
+        run: echo "name=${REGISTRY}/${GITHUB_REPOSITORY,,}/${{ matrix.component }}" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.component }}
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}:${{ needs.version.outputs.version }}
-            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component }}:latest
+            ${{ steps.image.outputs.name }}:${{ needs.version.outputs.version }}
+            ${{ steps.image.outputs.name }}:latest
 
   python-packages:
     name: ${{ matrix.component }} wheel + sdist
