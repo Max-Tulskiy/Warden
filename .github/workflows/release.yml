@@ -151,7 +151,7 @@ jobs:
           dotnet build warden-agent.wixproj
           -p:WardenVersion=${{ needs.version.outputs.version }}
           -p:WardenAgentExePath=../../dist/warden-agent.exe
-          -p:WardenConfigExamplePath=../../agent/config.example.toml
+          -p:WardenConfigExamplePath=config.example.toml
       - uses: softprops/action-gh-release@v2
         with:
           files: packaging/windows/bin/**/*.msi

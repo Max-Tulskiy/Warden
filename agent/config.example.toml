@@ -1,8 +1,9 @@
-# Copy to /etc/warden-agent/config.toml (Linux) or
-# %ProgramData%\Warden\agent\config.toml (Windows) and fill in before first
-# start. Values here take precedence over the WARDEN_AGENT_* environment
-# variables of the same name; anything left out falls back to the
-# environment variable, then to the default in warden_agent.config.
+# Copy to /etc/warden-agent/config.toml (Linux) and fill in before first
+# start; the .msi installs its own Windows copy,
+# packaging/windows/config.example.toml. Values here take precedence over
+# the WARDEN_AGENT_* environment variables of the same name; anything left
+# out falls back to the environment variable, then to the default in
+# warden_agent.config.
 
 server_url = "https://warden.example.internal"
 

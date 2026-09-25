@@ -1,0 +1,30 @@
+# Installed by the .msi as %ProgramData%\Warden\agent\config.toml. Fill in
+# server_url and enrollment_token, then restart the WardenAgent service.
+# Values here take precedence over the WARDEN_AGENT_* environment variables
+# of the same name; anything left out falls back to the environment
+# variable, then to the default in warden_agent.config.
+#
+# The Windows copy of agent/config.example.toml: the same settings, with
+# the agent's own files kept in this directory, which the installer
+# restricts to SYSTEM and Administrators.
+
+server_url = "https://warden.example.internal"
+
+# One-time token issued by an administrator (POST /api/v1/enrollment-tokens
+# on the server). Only needed for the very first start -- once enrolled,
+# the agent's id and key live in state_path below and this line can be
+# removed.
+enrollment_token = "REPLACE-WITH-A-REAL-ENROLLMENT-TOKEN"
+
+# Defaults to the OS hostname if left unset.
+# hostname = "WORKSTATION-07"
+
+poll_interval_seconds = 60
+inventory_interval_seconds = 3600
+
+# Must be at least 4 (the request-window cap, constitution principle 3/4).
+retention_hours = 8
+
+# Single quotes: TOML literal strings, so the backslashes stay as written.
+buffer_path = 'C:\ProgramData\Warden\agent\buffer.db'
+state_path = 'C:\ProgramData\Warden\agent\state.json'
