@@ -6,7 +6,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from warden_server.api import agents, audit, auth, operators, policy, reports, requests
+from warden_server.api import (
+    agents,
+    audit,
+    auth,
+    operators,
+    policy,
+    reports,
+    requests,
+    tls,
+)
 from warden_server.config import get_settings
 from warden_server.db import SessionLocal
 from warden_server.services.bootstrap import ensure_seed_operator
@@ -50,6 +59,7 @@ app.include_router(reports.router)
 app.include_router(policy.router)
 app.include_router(audit.router)
 app.include_router(operators.router)
+app.include_router(tls.router)
 
 
 @app.get("/health", tags=["health"])

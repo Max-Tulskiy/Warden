@@ -17,13 +17,13 @@
 ## Foundation
 
 - [x] T-1. Work on `main`, with no branch per spec (constitution Section IV, 1.3.2); `git branch --show-current` prints `main`
-- [ ] T-2. In `agent/pyproject.toml` add the `gui` extra (`PySide6-Essentials`), put it in `dev`, add `pytest-qt` and `trustme` to `testing`, and add the script `warden-agent-config`; in `agent/tests/conftest.py` set `QT_QPA_PLATFORM=offscreen` by default; install into `agent/.venv`; `python -c "import PySide6.QtWidgets, pytestqt, trustme"` succeeds there
+- [x] T-2. In `agent/pyproject.toml` add the `gui` extra (`PySide6-Essentials`), put it in `dev`, add `pytest-qt` and `trustme` to `testing`, and add the script `warden-agent-config`; in `agent/tests/conftest.py` set `QT_QPA_PLATFORM=offscreen` by default; install into `agent/.venv`; `python -c "import PySide6.QtWidgets, pytestqt, trustme"` succeeds there
 
 ## Server — publish the authority (R-5; A-12, A-13)
 
-- [ ] T-3. Tests, failing first, in `server/tests/integration/test_tls_authority/test_tls_authority.py` with a checked-in test certificate: `GET /api/v1/tls/ca` with no credential returns 200 and a `pem` that is the certificate; `sha256` is 64 lowercase hex characters equal to the SHA-256 of the certificate's DER form; a file holding the certificate and a private key returns only the certificate; no path set, a missing file, and a file with no certificate block each return 404; the path is read at request time (a file created after startup is served)
-- [ ] T-4. Add `tls_ca_path` to `server/src/warden_server/config.py`, `server/src/warden_server/schemas/tls.py`, and the router `server/src/warden_server/api/tls.py` (first certificate block only, `ssl.PEM_cert_to_DER_cert`, `hashlib`), include it in `main.py`; T-3 passes
-- [ ] T-5. Update `server/tests/integration/test_roles/test_open_endpoints.py` (the four open operations, docstring included) and regenerate `contracts/openapi.yaml` with `python scripts/export_openapi.py`; `test_openapi_contract.py` and the open-operations test pass
+- [x] T-3. Tests, failing first, in `server/tests/integration/test_tls_authority/test_tls_authority.py` with a checked-in test certificate: `GET /api/v1/tls/ca` with no credential returns 200 and a `pem` that is the certificate; `sha256` is 64 lowercase hex characters equal to the SHA-256 of the certificate's DER form; a file holding the certificate and a private key returns only the certificate; no path set, a missing file, and a file with no certificate block each return 404; the path is read at request time (a file created after startup is served)
+- [x] T-4. Add `tls_ca_path` to `server/src/warden_server/config.py`, `server/src/warden_server/schemas/tls.py`, and the router `server/src/warden_server/api/tls.py` (first certificate block only, `ssl.PEM_cert_to_DER_cert`, `hashlib`), include it in `main.py`; T-3 passes
+- [x] T-5. Update `server/tests/integration/test_roles/test_open_endpoints.py` (the four open operations, docstring included) and regenerate `contracts/openapi.yaml` with `python scripts/export_openapi.py`; `test_openapi_contract.py` and the open-operations test pass
 
 ## Agent — trust anchor, failures, status, waiting (R-9, R-15; A-4, A-10, A-16)
 

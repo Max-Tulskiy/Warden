@@ -896,6 +896,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tls/ca:
+    get:
+      tags:
+      - tls
+      summary: Certificate Authority
+      description: 'The certificate authority behind the server''s own certificate.
+
+
+        Read from the configured file at every request, since the proxy creates
+
+        its authority after the server may already be running. Only the first
+
+        certificate of the file is returned. A deployment whose certificate comes
+
+        from a public authority has no file, and the answer is 404: a station then
+
+        relies on its system''s own trust. This request is not written to the audit
+
+        log: it is unauthenticated, public, and anyone could otherwise grow the log.'
+      operationId: certificate_authority_api_v1_tls_ca_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TlsAuthorityOut'
+        '404':
+          description: The server has no authority of its own
   /health:
     get:
       tags:
@@ -1527,6 +1556,30 @@ components:
       - completed
       - failed
       title: TaskStatus
+    TlsAuthorityOut:
+      properties:
+        pem:
+          type: string
+          title: Pem
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          title: Sha256
+      type: object
+      required:
+      - pem
+      - sha256
+      title: TlsAuthorityOut
+      description: 'The certificate authority that issued the server''s own certificate.
+
+
+        `sha256` is the SHA-256 of the certificate''s DER form in lowercase hex:
+
+        the value an administrator compares between the panel and the agent''s
+
+        window before an agent trusts the authority. A station computes the
+
+        fingerprint again itself and does not rely on this field.'
     TokenResponse:
       properties:
         access_token:
