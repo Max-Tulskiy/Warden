@@ -546,6 +546,7 @@ async def connect(  # noqa: PLR0913 -- each is an independent option of the flow
     without a prompt only if it matches. `replace` confirms moving an enrolled
     station to another server.
     """
+    paths = paths.following_config()
     log = ConfiguratorLog(paths.log)
     server_url = server_url.strip().rstrip("/")
     log.write("connect", server=server_url)
@@ -627,6 +628,7 @@ async def begin_retrust(paths: AgentPaths) -> TrustNeeded | Refused:
     the station has never seen. Nothing is stored; the caller has the
     fingerprint compared and then calls `retrust`.
     """
+    paths = paths.following_config()
     log = ConfiguratorLog(paths.log)
     enrolled = _enrolled_server(paths)
     if enrolled is None:
@@ -655,6 +657,7 @@ async def retrust(
     verify the server, or nothing is changed. The station's id and key are left
     alone: only the authority it trusts is replaced.
     """
+    paths = paths.following_config()
     log = ConfiguratorLog(paths.log)
     enrolled = _enrolled_server(paths)
     if enrolled is None:
@@ -713,6 +716,7 @@ class StationStatus:
 
 
 def read_status(paths: AgentPaths, service: ServiceState) -> StationStatus:
+    paths = paths.following_config()
     config = read_config(paths.config)
     enrolled = _enrolled_server(paths)
     configured = config.get("server_url")

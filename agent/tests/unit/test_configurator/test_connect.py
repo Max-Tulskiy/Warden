@@ -385,3 +385,18 @@ async def test_a_blank_token_is_refused_without_asking_the_server(server, paths)
     assert isinstance(outcome, Refused)
     assert outcome.reason is RefusalReason.TOKEN_MISSING
     assert server.requests == []
+
+
+async def test_a_station_is_enrolled_where_the_configuration_says_the_agent_looks(
+    server, paths, tmp_path
+):
+    elsewhere = tmp_path / "var" / "state.json"
+    elsewhere.parent.mkdir()
+    write_config(paths.config, {"state_path": elsewhere})
+
+    outcome = await _confirmed(server, paths)
+
+    assert isinstance(outcome, Connected)
+    assert AgentState.load(elsewhere).is_enrolled
+    assert not paths.state.exists()
+    assert load_settings(paths.config).state_path == elsewhere
