@@ -1,6 +1,12 @@
 # Builds installers and container images and publishes them to a GitHub
 # Release, triggered by pushing a tag matching `v*` (e.g. `v0.1.0`).
 #
+# It can also be run by hand (workflow_dispatch) from any branch. That run
+# builds only the Windows installer, attaches it to the run as an artifact
+# and publishes nothing: no release, no container image, no package. It exists
+# so the installer can be compiled, and tried on a real Windows machine,
+# before a tag is pushed.
+#
 # linux-agent-package and windows-agent-installer both freeze the agent
 # with PyInstaller first: the Linux job freezes warden_agent/__main__.py
 # (the plain CLI, run under systemd as a foreground process); the Windows
@@ -10,8 +16,10 @@
 #
 # windows-agent-installer is the least-verified job in this workflow (no
 # Windows machine on the development side, constitution Section VI): its
-# first real run is this workflow's own first tag push, not a local dry
-# run beforehand. amd64 only for now, on both platforms -- PyInstaller
+# first real run is this workflow's own first run, not a local dry run
+# beforehand. It freezes two programs: the service, and the connection window
+# (warden_agent/configurator/windows.py) as a folder, whose executable asks
+# for administrator rights. amd64 only for now, on both platforms -- PyInstaller
 # does not cross-compile, and arm64 runners are not part of this pipeline
 # yet.
 name: Release
@@ -20,6 +28,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -34,12 +43,20 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
+      # A tag gives the version; a run started by hand has none, and the
+      # installer only needs a valid one.
       - id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0" >> "$GITHUB_OUTPUT"
+          fi
 
   docker-images:
     name: server + web container images
     needs: version
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -70,6 +87,7 @@ jobs:
   python-packages:
     name: ${{ matrix.component }} wheel + sdist
     needs: version
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -89,6 +107,7 @@ jobs:
   linux-agent-package:
     name: Linux agent package (.deb + .rpm)
     needs: version
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -145,6 +164,29 @@ jobs:
           pyinstaller --onefile --name warden-agent
           --hidden-import win32timezone
           --distpath ../dist src/warden_agent/service/windows.py
+      # The connection window is frozen as a folder, not one file: the Qt
+      # libraries stay separate files that can be replaced (PySide6 is
+      # LGPLv3), and nothing is unpacked into %TEMP% at every start.
+      # --uac-admin makes Windows ask for administrator rights when it is
+      # opened, since the agent's folder is closed to everyone else. The view
+      # (and Qt behind it) is imported by name at run time, where PyInstaller's
+      # analysis cannot see it, so it is named here.
+      - name: Freeze the connection window
+        working-directory: agent
+        run: >
+          pyinstaller --onedir --windowed --uac-admin --name warden-agent-config
+          --hidden-import win32timezone
+          --hidden-import warden_agent.configurator.view
+          --distpath ../dist src/warden_agent/configurator/windows.py
+      # Builds the window off screen and leaves. A Qt plugin the freeze missed
+      # fails the build here, not on the first administrator's desk.
+      - name: The frozen window starts
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $window = Start-Process -FilePath "dist/warden-agent-config/warden-agent-config.exe" -ArgumentList "--selftest" -Wait -PassThru
+          if ($window.ExitCode -ne 0) { throw "the frozen window did not start (exit code $($window.ExitCode))" }
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
@@ -156,6 +198,14 @@ jobs:
           -p:WardenVersion=${{ needs.version.outputs.version }}
           -p:WardenAgentExePath=../../dist/warden-agent.exe
           -p:WardenConfigExamplePath=config.example.toml
+          -p:WardenConfiguratorDirPath=../../dist/warden-agent-config
+      # Kept on the run itself, so an installer built by hand can be downloaded
+      # and tried without publishing a release.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: warden-agent-msi
+          path: packaging/windows/bin/**/*.msi
       - uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
         with:
           files: packaging/windows/bin/**/*.msi
