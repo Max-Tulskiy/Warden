@@ -1,6 +1,6 @@
 # Warden Project Constitution
 
-**Version:** 1.4.0 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-25
+**Version:** 1.5.0 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-25
 
 This document defines the project's purpose, mandatory development principles,
 its structure, and the decisions already made. The constitution takes priority
@@ -238,6 +238,7 @@ only the API contract connects them.
 | `warden_agent.buffer` | Local event buffer (SQLite), window queries, retention pruning |
 | `warden_agent.collectors` | Base `Collector`; categories `inventory`, `removable_media`, `printing`, `processes`, `web`; platform backends selected at runtime |
 | `warden_agent.service` | Service entry points: `systemd` on Linux, a Windows service |
+| `warden_agent.configurator` | Connecting a station to a server: a command line for any platform and, on Windows, a window (PySide6, imported only by its view module) and the installer's helper; its Windows-only parts are in `windows.py` (D-13) |
 
 ### Server modules
 
@@ -372,7 +373,8 @@ action with nothing to reissue. A refused observer gets 403, not 401, so the
 panel can tell "you may not" from "your session ended". Hiding a control in the
 panel is a courtesy and never the control itself. Two tests keep this honest: one
 walks the API's own schema and fails when any operation other than sign-in,
-agent enrollment, and health can be reached without a credential; the other
+agent enrollment, health, and the publication of the server's certificate
+authority (D-13) can be reached without a credential; the other
 compares every operator endpoint with the table of what each role may do.
 
 Accounts are only disabled, never deleted, so that the names in the audit log
@@ -445,6 +447,46 @@ parameters again, and it would include the reads decided out); a separate table
 for views (a second place to read for "who did what"); naming the entries under
 `operator` (it would fill the group an administrator watches for sign-ins and
 account changes).
+
+### D-13. A station is connected by a person, and trusts a server's own authority only by fingerprint
+
+An agent is connected to a server by a person: from a window on the station (on
+Windows), from the installer's wizard or its properties, or from the same
+command line on any platform. Connecting enrolls the station (D-3) and saves the
+server and, when one is needed, a certificate authority. The one-time enrollment
+token is used once and never written to disk by this path.
+
+The default deployment's certificate comes from an authority of its own, which
+no workstation knows. The server publishes that authority's certificate and its
+SHA-256 fingerprint at an endpoint readable without a credential, since a
+station that has not enrolled has none. The agent fetches it with certificate
+checking off -- the one request it makes unverified, carrying no token and no
+key -- computes the fingerprint itself, and trusts the authority only after an
+administrator has compared it with the fingerprint the panel shows beside the
+enrollment token, or when it matches one given in advance. A silent install with
+no fingerprint trusts nothing. The trust is the agent's own: the authority is
+kept in the agent's folder and named in its configuration, and the operating
+system's certificate store is never modified. It is given to the authority, not
+to the server's certificate, which the proxy reissues every few hours. Moving a
+station to another server drops it and needs a new enrollment; a server rebuilt
+with a new authority is trusted again by the same comparison, without enrolling
+again.
+
+The server reads the authority from a file at each request. The proxy's data
+volume holds the authority's private key beside its certificate, so it is not
+mounted into the server: a small service copies the certificate alone. The
+request is not written to the audit log (public, unauthenticated, and anyone
+could otherwise grow the log). On Windows the window is built with PySide6 and
+shipped as a folder, so the Qt libraries stay replaceable files (LGPLv3).
+
+Considered and rejected: adding the authority to the system's trust store (trust
+for every program on the station, and the authority's key would then be able to
+impersonate any site to all of them); turning verification off; trusting the
+server's certificate itself (it is replaced within hours); a page the agent
+serves locally (D-1); mounting the proxy's whole data volume into the server
+(it would expose the authority's private key to the component facing the
+network); a window in tkinter (it cannot be tested without a display, and is
+absent from many Python builds).
 
 ---
 
@@ -552,7 +594,24 @@ What Warden does not do and does not promise:
   log is not proof that nothing was read;
 * **the audit log is append-only only by how the server code uses it** — the
   database has no trigger or permission that stops an account with write access
-  to PostgreSQL from altering or deleting rows, so the log is not tamper-evident.
+  to PostgreSQL from altering or deleting rows, so the log is not tamper-evident;
+* **the first trust of a server's own certificate authority rests on a person
+  comparing a fingerprint** (D-13) — an administrator who confirms without
+  comparing, with an attacker in the path at that moment, makes the station trust
+  a false authority. A silent install cannot trust an authority without a
+  fingerprint given in advance, but nothing checks that the one given is the
+  right one. The fingerprint in the panel is read from the same server, so it
+  guards the path between a station and the server, not a compromised server;
+* **the authority is renewed by nothing** — the proxy's lasts ten years, and a
+  server rebuilt with a new one has to be trusted again at every station, by the
+  same comparison. The request for the authority is not in the audit log;
+* **the connection window exists only on Windows** — a Linux station is connected
+  by editing its file or with the command line, and both platforms save the same
+  files;
+* **the enrollment token can be read from a command line during an install that
+  carries it** — from the process list while the installer's helper runs, and from
+  a verbose installer log or command-line auditing where either is on. It is
+  one-time and useless once used.
 
 ---
 
@@ -602,3 +661,4 @@ What Warden does not do and does not promise:
 | 1.3.1 | 2026-09-25 | PATCH: Section V lost the boundary noting that overlapping window requests could store the same event twice — `specs/007-event-deduplication/` closes it: ingestion now stores an event once per station, matched on category, timestamp, and payload. No principle or decision changed |
 | 1.3.2 | 2026-09-25 | PATCH: Section IV no longer asks for a git branch per spec; work is committed straight to `main`. The spec template's branch field and the workflow commands that offered a branch or looked one up were brought in line. No principle or decision changed |
 | 1.4.0 | 2026-09-25 | MINOR: added decision D-12 (a view of the daily report, the cross-station report, a station's inventory-change history, or the audit log is recorded under its own `view` group, written before the data is read so that a view is never answered without its entry; the station list, the policy, the list of operators, and the session check are not recorded) and rewrote the Section V boundary that said reads are not recorded. See `specs/008-read-audit/` |
+| 1.5.0 | 2026-09-25 | MINOR: added decision D-13 (a station is connected by a person, from a window, the installer, or a command line; it trusts a server's own certificate authority only after its fingerprint is compared, for the agent alone and never in the system store; the token is not kept; the server publishes its authority openly, and its private key is kept out of the server), widened D-10's list of operations open without a credential to include that publication, added `warden_agent.configurator` to Section II, and added five Section V boundaries that come with it. See `specs/009-windows-agent-configurator/` |

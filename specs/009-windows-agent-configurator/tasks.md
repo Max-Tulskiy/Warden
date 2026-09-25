@@ -83,7 +83,7 @@
 
 ## Constitution (Section VII)
 
-- [ ] T-35. Amend `.specify/memory/constitution.md` to 1.5.0 (MINOR): decision D-13, D-10's sentence naming the operations open without a credential, Section II's table of agent modules, the Section V boundaries listed in the plan's §1.5, a version-history row, and the "last amended" date; the documents made stale by it are those of T-36…T-39
+- [x] T-35. Amend `.specify/memory/constitution.md` to 1.5.0 (MINOR): decision D-13, D-10's sentence naming the operations open without a credential, Section II's table of agent modules, the Section V boundaries listed in the plan's §1.5, a version-history row, and the "last amended" date; the documents made stale by it are those of T-36…T-39
 
 ## Documentation (principle 9)
 
