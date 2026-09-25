@@ -400,3 +400,13 @@ async def test_a_station_is_enrolled_where_the_configuration_says_the_agent_look
     assert AgentState.load(elsewhere).is_enrolled
     assert not paths.state.exists()
     assert load_settings(paths.config).state_path == elsewhere
+
+
+async def test_the_configuration_written_names_the_state_the_agent_will_read(
+    server, paths
+):
+    """Left out, the agent would look in the folder it happens to be started in."""
+    await _confirmed(server, paths)
+
+    assert load_settings(paths.config).state_path == paths.state
+    assert AgentState.load(load_settings(paths.config).state_path).is_enrolled

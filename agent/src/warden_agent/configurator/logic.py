@@ -592,6 +592,9 @@ def _commit(
         paths.authority.read_bytes() if paths.authority.exists() else None
     )
     values = dict(plan.values)
+    # The agent reads its state from `state_path`, and its default is relative
+    # to wherever it is started, so the configuration says where it really is.
+    values.setdefault("state_path", paths.state)
     try:
         if candidate is not None:
             write_atomically(paths.authority, candidate.pem)
