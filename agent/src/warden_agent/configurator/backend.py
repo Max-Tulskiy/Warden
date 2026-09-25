@@ -34,3 +34,27 @@ class Backend(Protocol):
     def restart_service(self) -> None:
         """Restart the service if it is running, so it rereads what was saved."""
         ...
+
+
+class LocalBackend:
+    """A backend over a plain folder, with no service behind it.
+
+    For a development machine and for any platform the window does not ship on;
+    what the operating system's permissions allow is what may be changed.
+    """
+
+    def __init__(self, paths: AgentPaths) -> None:
+        self._paths = paths
+
+    @property
+    def paths(self) -> AgentPaths:
+        return self._paths
+
+    def is_elevated(self) -> bool:
+        return True
+
+    def service_state(self) -> ServiceState:
+        return ServiceState.NOT_APPLICABLE
+
+    def restart_service(self) -> None:
+        return None
