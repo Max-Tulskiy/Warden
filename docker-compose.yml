@@ -26,6 +26,12 @@ services:
       WARDEN_SEED_ADMIN_USERNAME: ${WARDEN_SEED_ADMIN_USERNAME:-}
       WARDEN_SEED_ADMIN_PASSWORD: ${WARDEN_SEED_ADMIN_PASSWORD:-}
       WARDEN_CORS_ORIGINS: '["https://${WARDEN_DOMAIN:-localhost}"]'
+      # The proxy's own certificate authority, offered to agents that have not
+      # enrolled yet (GET /api/v1/tls/ca). Empty when the certificate comes from
+      # a public authority.
+      WARDEN_TLS_CA_PATH: /warden-ca/root.crt
+    volumes:
+      - warden_ca:/warden-ca:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,6 +53,36 @@ services:
       - server
       - web
 
+  # Copies the proxy's certificate authority -- only its certificate -- to where
+  # the server can read it. The proxy's data volume also holds that authority's
+  # private key beside the certificate, and the server, which faces the network,
+  # must never be able to read it, so the volume is not mounted there. A
+  # deployment with a certificate from a public authority never gets a
+  # root.crt: the wait ends, the copy is skipped, and the server has nothing to
+  # publish.
+  ca-export:
+    image: caddy:2.8-alpine
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        root=/caddy-data/caddy/pki/authorities/local/root.crt
+        waited=0
+        while [ ! -f "$$root" ] && [ "$$waited" -lt 120 ]; do
+          sleep 1
+          waited=$$((waited + 1))
+        done
+        if [ -f "$$root" ]; then
+          cp "$$root" /export/root.crt
+          chmod 0444 /export/root.crt
+        fi
+        exec sleep infinity
+    volumes:
+      - caddy_data:/caddy-data:ro
+      - warden_ca:/export
+    depends_on:
+      - proxy
+
 volumes:
   postgres_data:
   caddy_data:
+  warden_ca:
