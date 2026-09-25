@@ -23,6 +23,12 @@ export interface EnrollmentToken {
   expires_at: string;
 }
 
+/** The certificate authority behind the server's own certificate. */
+export interface TlsAuthority {
+  pem: string;
+  sha256: string;
+}
+
 export interface EventRecord {
   id: string;
   category: "removable_media" | "printing" | "processes" | "web";

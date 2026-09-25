@@ -71,8 +71,8 @@
 
 ## Panel — the fingerprint (R-6; A-12)
 
-- [ ] T-29. Tests, failing first: `web/tests/unit/fingerprint.test.ts` (64 hex characters become `AB:CD:…`, case and colons ignored, anything else returned unchanged) and `web/tests/unit/agentsPage.test.tsx` (an administrator sees «Отпечаток сертификата сервера (SHA-256)» with the formatted value; a 404 shows the note that the system already verifies the certificate; a failed request shows nothing and the page still works; an observer does not see the block)
-- [ ] T-30. Add `getTlsAuthority()` to `web/src/api/client.ts`, `TlsAuthority` to `types.ts`, `web/src/lib/fingerprint.ts`, and the block in `web/src/pages/AgentsPage.tsx`; T-29 passes
+- [x] T-29. Tests, failing first: `web/tests/unit/fingerprint.test.ts` (64 hex characters become `AB:CD:…`, case and colons ignored, anything else returned unchanged) and `web/tests/unit/agentsPage.test.tsx` (an administrator sees «Отпечаток сертификата сервера (SHA-256)» with the formatted value; a 404 shows the note that the system already verifies the certificate; a failed request shows nothing and the page still works; an observer does not see the block)
+- [x] T-30. Add `getTlsAuthority()` to `web/src/api/client.ts`, `TlsAuthority` to `types.ts`, `web/src/lib/fingerprint.ts`, and the block in `web/src/pages/AgentsPage.tsx`; T-29 passes
 
 ## Deployment and installer (R-5, R-13, R-14, R-16)
 

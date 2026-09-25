@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { createEnrollmentToken, listAgents } from "../api/client";
-import type { Agent, EnrollmentToken } from "../api/types";
+import {
+  ApiError,
+  createEnrollmentToken,
+  getTlsAuthority,
+  listAgents,
+} from "../api/client";
+import type { Agent, EnrollmentToken, TlsAuthority } from "../api/types";
 import { AppShell } from "../components/AppShell";
 import { CopyIcon, KeyIcon } from "../components/icons";
 import { StatusPill } from "../components/StatusPill";
+import { formatFingerprint } from "../lib/fingerprint";
 import { stationStatus } from "../lib/stationStatus";
 import { useAuth } from "../state/authContext";
 
@@ -17,6 +23,9 @@ export function AgentsPage() {
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [tokenMessage, setTokenMessage] = useState<string | null>(null);
   const [issuingToken, setIssuingToken] = useState(false);
+  // What the server publishes about its own certificate authority: the
+  // authority itself, `"none"` when it has none, `null` while unknown or failed.
+  const [authority, setAuthority] = useState<TlsAuthority | "none" | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -24,6 +33,15 @@ export function AgentsPage() {
       .then(setAgents)
       .catch(() => setError("Не удалось загрузить список станций"));
   }, [token]);
+
+  useEffect(() => {
+    if (role !== "admin") return;
+    getTlsAuthority()
+      .then(setAuthority)
+      .catch((error: unknown) => {
+        setAuthority(error instanceof ApiError && error.status === 404 ? "none" : null);
+      });
+  }, [role]);
 
   const onlineCount = useMemo(
     () => agents?.filter((agent) => stationStatus(agent) === "online").length ?? 0,
@@ -86,6 +104,24 @@ export function AgentsPage() {
           </button>
         )}
       </div>
+
+      {role === "admin" && authority === "none" && (
+        <p className="muted" style={{ marginTop: 0 }}>
+          Сервер использует сертификат, который система уже проверяет: сверять отпечаток не
+          нужно.
+        </p>
+      )}
+      {role === "admin" && authority !== null && authority !== "none" && (
+        <div className="notice" style={{ marginBottom: 18 }}>
+          <div>
+            <div className="notice-title">Отпечаток сертификата сервера (SHA-256)</div>
+            <div className="mono token-value">{formatFingerprint(authority.sha256)}</div>
+            <div className="text-tertiary" style={{ fontSize: 12, marginTop: 6 }}>
+              Сверьте его с отпечатком в окне настройки агента, прежде чем доверять серверу.
+            </div>
+          </div>
+        </div>
+      )}
 
       {enrollmentToken && (
         <div className="notice" style={{ marginBottom: 18 }}>

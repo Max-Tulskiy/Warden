@@ -11,6 +11,7 @@ import type {
   Policy,
   Role,
   Task,
+  TlsAuthority,
 } from "./types";
 
 export class ApiError extends Error {
@@ -99,6 +100,16 @@ export function createEnrollmentToken(token: string): Promise<EnrollmentToken> {
     method: "POST",
     token,
   });
+}
+
+/**
+ * The authority behind the server's own certificate, for comparing its
+ * fingerprint with the one an agent's window shows. Asked for without a
+ * session, since a station that has not enrolled yet has none; a 404 means the
+ * server has no authority of its own.
+ */
+export function getTlsAuthority(): Promise<TlsAuthority> {
+  return request<TlsAuthority>("/tls/ca");
 }
 
 export function requestWindow(
