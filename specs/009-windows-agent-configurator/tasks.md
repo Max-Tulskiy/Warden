@@ -66,8 +66,8 @@
 
 ## Configurator — Windows backend (R-12; A-9)
 
-- [ ] T-27. Tests, failing first, in `agent/tests/unit/test_configurator/test_windows.py` over stand-in `win32` modules, as `test_windows_service.py` does: `WindowsBackend` reports elevation both ways, maps service states, restarts the service, and builds `%ProgramData%\Warden\agent` paths; `main()` with `--apply`, `--check`, `--selftest`, and no arguments dispatches to the CLI, the CLI, the off-screen window build, and the window
-- [ ] T-28. Add `agent/src/warden_agent/configurator/windows.py`; T-27 passes; no `sys.platform` or `platform.system` outside `collectors/registry.py`
+- [x] T-27. Tests, failing first, in `agent/tests/unit/test_configurator/test_windows.py` over stand-in `win32` modules, as `test_windows_service.py` does: `WindowsBackend` reports elevation both ways, maps service states, restarts the service, and builds `%ProgramData%\Warden\agent` paths; `main()` with `--apply`, `--check`, `--selftest`, and no arguments dispatches to the CLI, the CLI, the off-screen window build, and the window
+- [x] T-28. Add `agent/src/warden_agent/configurator/windows.py`; T-27 passes; no `sys.platform` or `platform.system` outside `collectors/registry.py`
 
 ## Panel — the fingerprint (R-6; A-12)
 

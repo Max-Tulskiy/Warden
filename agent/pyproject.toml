@@ -107,8 +107,9 @@ exclude = ["build/", "venv/", "tests/"]
 # module can only be attribute-checked for real on a windows-latest CI run.
 # The transformation logic these backends delegate to (parse_uninstall_entries
 # and its siblings) has no such gap and is fully checked above.
+# `ctypes.windll` in the connection tool's Windows backend is the same case.
 [[tool.mypy.overrides]]
-module = "warden_agent.collectors.*.windows"
+module = ["warden_agent.collectors.*.windows", "warden_agent.configurator.windows"]
 disable_error_code = ["attr-defined"]
 
 [tool.bandit]
