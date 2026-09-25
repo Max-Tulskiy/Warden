@@ -76,6 +76,11 @@ fixable = ["ALL"]
 # Windows/Linux OS backends legitimately import platform-only modules
 # (winreg, pyudev, win32evtlog) - unavoidable for principle 1's isolation.
 "src/warden_agent/**/windows.py" = ["PLC0415"]
+# The connection window's Russian text lives in one catalog (constitution
+# principle 9). RUF001 flags Cyrillic letters that look like Latin ones, which
+# is the whole point of that file.
+"src/warden_agent/configurator/messages.py" = ["RUF001"]
+"tests/unit/test_configurator/*.py" = ["RUF001"]
 "src/warden_agent/collectors/**/linux.py" = ["PLC0415"]
 
 [tool.ruff.format]

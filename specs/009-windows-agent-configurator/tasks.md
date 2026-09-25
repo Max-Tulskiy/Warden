@@ -37,13 +37,13 @@
 
 ## Configurator — text, paths, configuration file (R-8, R-10, R-17)
 
-- [ ] T-13. Tests, failing first, in `agent/tests/unit/test_configurator/`: every string in `messages.py` contains Cyrillic; `AgentPaths.for_directory` puts the configuration, `server-ca.pem`, `state.json`, `status.json`, and `configurator.log` in one folder; the configuration file round-trips, keeps keys the administrator set (`poll_interval_seconds`, `retention_hours`, extra flat keys), writes `ca_file` and the two paths as TOML literal strings, drops `enrollment_token`, and starts from the template when the file is missing
-- [ ] T-14. Add `agent/src/warden_agent/configurator/{__init__,messages,paths,config_file}.py`; T-13 passes
+- [x] T-13. Tests, failing first, in `agent/tests/unit/test_configurator/`: every string in `messages.py` contains Cyrillic; `AgentPaths.for_directory` puts the configuration, `server-ca.pem`, `state.json`, `status.json`, and `configurator.log` in one folder; the configuration file round-trips, keeps keys the administrator set (`poll_interval_seconds`, `retention_hours`, extra flat keys), writes `ca_file` and the two paths as TOML literal strings, drops `enrollment_token`, and starts from the template when the file is missing
+- [x] T-14. Add `agent/src/warden_agent/configurator/{__init__,messages,paths,config_file}.py`; T-13 passes
 
 ## Configurator — fetching and probing (R-3, R-4, R-5; A-6, A-12, A-13)
 
-- [ ] T-15. Tests, failing first, in `agent/tests/unit/test_configurator/test_authority.py` against the T-6 server: `probe` returns *reachable and trusted*, *certificate not trusted*, *unreachable*, and *unexpected reply* for the four cases; `fetch_authority` returns a `TrustOffer` whose SHA-256 is computed locally over the DER form (a server that reports a different `sha256` is ignored) and whose subject and validity come from the certificate; a 404 gives `NoAuthority`; text that is not a certificate is refused. In `agent/tests/integration/test_full_cycle/test_authority_contract.py` the reply of the real server app (with a configured `tls_ca_path`) is parsed by the same function
-- [ ] T-16. Add `agent/src/warden_agent/configurator/logic.py` with `probe`, `fetch_authority`, `TrustOffer`, and the outcome types (`FingerprintMismatch`, `NoAuthority`, `TrustNeeded`, and so on); the one request made without checking the certificate carries no token and no key; T-15 passes
+- [x] T-15. Tests, failing first, in `agent/tests/unit/test_configurator/test_authority.py` against the T-6 server: `probe` returns *reachable and trusted*, *certificate not trusted*, *unreachable*, and *unexpected reply* for the four cases; `fetch_authority` returns a `TrustOffer` whose SHA-256 is computed locally over the DER form (a server that reports a different `sha256` is ignored) and whose subject and validity come from the certificate; a 404 gives `NoAuthority`; text that is not a certificate is refused. In `agent/tests/integration/test_full_cycle/test_authority_contract.py` the reply of the real server app (with a configured `tls_ca_path`) is parsed by the same function
+- [x] T-16. Add `agent/src/warden_agent/configurator/logic.py` with `probe`, `fetch_authority`, `TrustOffer`, and the outcome types (`FingerprintMismatch`, `NoAuthority`, `TrustNeeded`, and so on); the one request made without checking the certificate carries no token and no key; T-15 passes
 
 ## Configurator — connecting, changing server, re-trusting (R-1, R-4, R-7, R-9…R-11, R-14, R-18; A-1…A-8, A-11, A-14, A-15, A-18)
 
