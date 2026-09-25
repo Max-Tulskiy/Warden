@@ -376,12 +376,14 @@ The full list is constitution Section V. The essentials:
   registration (`agent.enroll_rejected`) it is the hostname sent by a caller who
   has no valid token at that point. The panel renders it as text, never as
   markup;
-- a disabled agent keeps contacting the server once per poll interval and
-  getting a 401, logging the error locally; the server does not audit these
-  rejections (that would be about 1,440 rows a day per station). A window
-  request can still be placed for a disabled station: it stays queued until
-  the station is re-enabled, after which the agent answers from a buffer that
-  has already been partly pruned.
+- a disabled agent keeps getting a 401 and logging it locally; the server does
+  not audit these rejections. From the second consecutive failure on, the
+  poll interval doubles on every further attempt, capped at 16 times the
+  configured value (a 60-second interval backs off to at most 16 minutes), so
+  a disabled station stops hammering the server forever while still noticing
+  on its own once it is re-enabled, with no restart needed. A window request
+  for a disabled station is rejected outright (409) instead of being queued
+  until the station comes back.
 
 ## Answers to common questions
 
