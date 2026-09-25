@@ -151,6 +151,15 @@ enrollment token) and restart the service:
 Restart-Service WardenAgent
 ```
 
+The agent keeps its event buffer (`buffer.db`) and its state with the
+agent key (`state.json`) in the same `%ProgramData%\Warden\agent`
+directory. The installer locks that directory down: only SYSTEM and
+Administrators have access, so ordinary users can read neither the config
+with its enrollment token nor the agent key. The rights are set by
+well-known SID, so the installation does not depend on the Windows
+language. Uninstalling the agent leaves these files in place -- remove the
+directory by hand if it is no longer needed.
+
 > The installer is unsigned -- SmartScreen will warn on first run
 > (constitution Section V).
 
