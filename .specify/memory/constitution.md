@@ -1,6 +1,6 @@
 # Warden Project Constitution
 
-**Version:** 1.3.0 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-24
+**Version:** 1.3.1 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-25
 
 This document defines the project's purpose, mandatory development principles,
 its structure, and the decisions already made. The constitution takes priority
@@ -482,8 +482,7 @@ What Warden does not do and does not promise:
 * **the cross-station report shows only what stations have delivered in answer
   to window requests** (principle 2), not everything they did in the period: a
   station whose window was never requested appears empty however much happened
-  on it, and overlapping requests can store the same event twice, since events
-  are not deduplicated on ingestion;
+  on it;
 * **sessions can be ended only all at once** — a password change, an explicit
   "end all sessions", or an administrator disabling the account or resetting its
   password ends every session of that operator (D-9), but one session cannot be
@@ -563,3 +562,4 @@ What Warden does not do and does not promise:
 | 1.1.0 | 2026-09-24 | MINOR: added decision D-9 (sessions are stateless tokens carrying a per-operator version, so a password change or an explicit request ends them) and rewrote the Section V boundary that said a password change does not end sessions, which no longer holds; what remains true is that sessions can only be ended all at once and only by their owner. See `specs/004-session-revocation/` |
 | 1.2.0 | 2026-09-24 | MINOR: added decision D-10 (two roles, an administrator and an observer, enforced by the server on every request with the role read from the database and not carried in the token; accounts are disabled, never deleted) and three Section V boundaries that come with it: an observer sees everything collected, an initial or reset password is known to the administrator who set it, and two administrators acting on each other at once can leave none active. The Section V sessions boundary was widened to say an administrator can also end an operator's sessions. See `specs/005-operator-management/` |
 | 1.3.0 | 2026-09-24 | MINOR: added decision D-11 (the request window limit, the enrollment token lifetime, and the session lifetime are stored as one saved set, edited by administrators within fixed bounds, and read afresh at every use; the four-hour window ceiling is a constant in code and the server's configuration is the default) and three Section V boundaries that come with it: a change applies only from the next use, one policy serves the whole deployment with the audit log as its only history, and a saved policy outranks the configuration until it is reset. See `specs/006-editable-policy/` |
+| 1.3.1 | 2026-09-25 | PATCH: Section V lost the boundary noting that overlapping window requests could store the same event twice — `specs/007-event-deduplication/` closes it: ingestion now stores an event once per station, matched on category, timestamp, and payload. No principle or decision changed |
