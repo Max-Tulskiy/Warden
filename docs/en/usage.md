@@ -60,8 +60,8 @@ days", or a custom one. You can narrow it to specific stations (none ticked
 means all) and to a category. The report shows only events the stations
 delivered in answer to window requests: to see a station's activity over the
 period you care about, request a window for it (the station page, at most 4
-hours per request). Repeated requests for overlapping windows can put
-duplicates in the report -- there is no deduplication on ingestion.
+hours per request). When two requests' windows overlap, a re-delivered event
+is not doubled in the report -- the server stores it once.
 
 **Settings.** Four blocks: changing your password (the current password is
 required; after the change this session carries on and all the operator's other
@@ -362,6 +362,13 @@ saving for the first time at the same instant (only a unit test that simulates t
 failed insert covers that race); behavior with several server processes (reading at
 every use should provide it, but there was one process); and there was only one
 browser -- Chromium.
+
+Separately, for event deduplication (`specs/007-event-deduplication/`): the
+`ix_events_agent_id_occurred_at` migration was likewise applied, reversed,
+and applied again on PostgreSQL. The deduplication logic itself -- that a
+re-delivered event is stored only once -- needs no live run and is covered
+only by `pytest` (SQLite): it is server logic, not a platform collector, and
+constitution principle 7 treats that as sufficient.
 
 This is not an oversight -- it follows directly from constitution principle
 10 ("honesty about boundaries"): naming the actual level of confidence beats

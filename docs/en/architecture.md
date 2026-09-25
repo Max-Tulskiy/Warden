@@ -46,7 +46,10 @@ connection is not workable in practice.
    agent **re-checks** that the window does not exceed 4 hours (a deliberate
    double check, constitution principle 3), selects buffered events across
    every category for that window, and sends them via
-   `POST /api/v1/agents/{id}/reports`.
+   `POST /api/v1/agents/{id}/reports`. The server stores only what it does
+   not already have for that station (a match on category, moment, and
+   content counts as the same event): overlapping window requests do not
+   double the report, even when both cover the same occurrence.
 5. **Inventory and heartbeat.** Separately from events, every
    `inventory_interval_seconds` (1h by default) the agent sends a
    hardware/software snapshot (`POST /api/v1/agents/{id}/inventory`), which
@@ -338,9 +341,6 @@ The full list is constitution Section V. The essentials:
   events get there solely through window requests (principle 2). It is not
   "everything the fleet did in the period": a station whose window was never
   requested shows nothing, however much happened on it;
-- repeated requests for overlapping windows store the same event twice --
-  there is no deduplication on ingestion, so the report (like the daily one)
-  can show duplicates;
 - only all of an operator's sessions can be ended at once: the operator does it
   by changing the password or with "Завершить все сеансы" (end all sessions), an
   administrator by disabling the account or resetting its password. A single
