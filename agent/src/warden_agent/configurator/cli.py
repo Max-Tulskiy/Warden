@@ -75,7 +75,7 @@ def _apply(args: argparse.Namespace, backend: Backend) -> int:
             backend.paths,
             server_url=args.server,
             token=args.token or "",
-            expected_sha256=args.ca_sha256,
+            expected_sha256=args.ca_sha256 or None,
             replace=args.replace,
         )
     )

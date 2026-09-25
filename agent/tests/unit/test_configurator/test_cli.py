@@ -202,3 +202,16 @@ def test_the_tool_needs_to_be_told_which_configuration_to_work_on(capsys):
 
     assert refused.value.code == 2
     assert "--config" in capsys.readouterr().err
+
+
+def test_an_empty_fingerprint_is_the_same_as_none_given(server, backend, capsys):
+    """The installer passes every property, empty ones included."""
+    fingerprint = _fingerprint(server)
+
+    code = _run(
+        backend, "--apply", "--no-restart", "--server", server.url, "--token", CODE,
+        "--ca-sha256", "",
+    )  # fmt: skip
+
+    assert code == EXIT_NOT_CONNECTED
+    assert fingerprint in capsys.readouterr().out  # the offer, not "not a fingerprint"
