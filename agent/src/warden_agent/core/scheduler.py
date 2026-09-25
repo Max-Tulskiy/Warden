@@ -22,7 +22,8 @@ from typing import Final
 from warden_agent.buffer import Buffer
 from warden_agent.collectors.base import Collector, InventoryCollector
 from warden_agent.core.models import OutgoingEvent, TaskDTO
-from warden_agent.core.transport import ServerClient
+from warden_agent.core.transport import ServerClient, classify_failure
+from warden_agent.status import StatusStore
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,7 @@ class AgentScheduler:
         retention_hours: int,
         max_window_hours: int,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        status: StatusStore | None = None,
     ) -> None:
         self._client = client
         self._buffer = buffer
@@ -162,6 +164,7 @@ class AgentScheduler:
         self._retention_hours = retention_hours
         self._max_window_hours = max_window_hours
         self._sleep = sleep
+        self._status = status
         self._stopping = asyncio.Event()
 
     def stop(self) -> None:
@@ -170,20 +173,30 @@ class AgentScheduler:
     async def run_forever(self) -> None:
         await asyncio.gather(
             self._loop(self._collection_tick, self._poll_interval),
-            self._loop(self._poll_tick, self._poll_interval),
-            self._loop(self._inventory_tick, self._inventory_interval),
+            self._loop(self._poll_tick, self._poll_interval, talks_to_server=True),
+            self._loop(
+                self._inventory_tick, self._inventory_interval, talks_to_server=True
+            ),
         )
 
     async def _loop(
-        self, tick: Callable[[], Awaitable[None]], interval_seconds: int
+        self,
+        tick: Callable[[], Awaitable[None]],
+        interval_seconds: int,
+        *,
+        talks_to_server: bool = False,
     ) -> None:
         consecutive_failures = 0
         while not self._stopping.is_set():
             try:
                 await tick()
-            except Exception:
+            except Exception as exc:
                 logger.exception("scheduled task failed, continuing on the next tick")
                 consecutive_failures += 1
+                # Only a loop that reaches the server says something about the
+                # connection; a collector that crashed is not a server problem.
+                if talks_to_server and self._status is not None:
+                    self._status.record_failure(classify_failure(exc))
             else:
                 consecutive_failures = 0
             await self._sleep(
@@ -205,6 +218,7 @@ class AgentScheduler:
             agent_key=self._agent_key,
             max_window_hours=self._max_window_hours,
         )
+        self._note_contact()
 
     async def _inventory_tick(self) -> None:
         await run_inventory_pass(
@@ -213,3 +227,8 @@ class AgentScheduler:
             agent_id=self._agent_id,
             agent_key=self._agent_key,
         )
+        self._note_contact()
+
+    def _note_contact(self) -> None:
+        if self._status is not None:
+            self._status.record_success()

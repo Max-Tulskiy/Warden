@@ -74,7 +74,7 @@ def agent_run(monkeypatch):
     """Replace the agent with one that runs until it is cancelled."""
     state = SimpleNamespace(started=threading.Event(), cleaned_up=False)
 
-    async def run(_settings: object) -> None:
+    async def run(_settings: object, **_kwargs: object) -> None:
         state.started.set()
         try:
             await asyncio.Event().wait()

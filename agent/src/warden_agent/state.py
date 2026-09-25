@@ -10,13 +10,27 @@ from pathlib import Path
 from pydantic import BaseModel
 
 
+def _same_server(a: str, b: str) -> bool:
+    return a.rstrip("/").casefold() == b.rstrip("/").casefold()
+
+
 class AgentState(BaseModel):
     agent_id: str | None = None
     agent_key: str | None = None
+    #: The server the key was issued by. A key means nothing to any other
+    #: server, so an agent whose configuration names a different one is not
+    #: enrolled there. Absent in a state written by an earlier version, which
+    #: is then accepted as it is.
+    server_url: str | None = None
 
     @property
     def is_enrolled(self) -> bool:
         return self.agent_id is not None and self.agent_key is not None
+
+    def is_enrolled_for(self, server_url: str) -> bool:
+        if not self.is_enrolled:
+            return False
+        return self.server_url is None or _same_server(self.server_url, server_url)
 
     @classmethod
     def load(cls, path: Path) -> "AgentState":

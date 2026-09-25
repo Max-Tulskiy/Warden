@@ -44,3 +44,43 @@ def test_save_and_load_round_trip(tmp_path):
 def test_is_enrolled_is_false_with_only_one_field_set():
     assert not AgentState(agent_id="a1").is_enrolled
     assert not AgentState(agent_key="k1").is_enrolled
+
+
+def test_the_server_an_agent_enrolled_with_is_saved_and_loaded(tmp_path):
+    path = tmp_path / "state.json"
+
+    AgentState(agent_id="a1", agent_key="k1", server_url="https://warden.example").save(
+        path
+    )
+
+    assert AgentState.load(path).server_url == "https://warden.example"
+
+
+def test_a_state_written_before_the_server_was_recorded_still_loads(tmp_path):
+    path = tmp_path / "state.json"
+    path.write_text('{"agent_id": "a1", "agent_key": "k1"}')
+
+    state = AgentState.load(path)
+
+    assert state.is_enrolled
+    assert state.server_url is None
+
+
+def test_a_state_belongs_to_the_server_it_enrolled_with():
+    state = AgentState(agent_id="a1", agent_key="k1", server_url="https://a.example")
+
+    assert state.is_enrolled_for("https://a.example")
+    assert state.is_enrolled_for("https://a.example/")
+    assert state.is_enrolled_for("HTTPS://A.EXAMPLE")
+    assert not state.is_enrolled_for("https://b.example")
+
+
+def test_a_state_without_a_recorded_server_matches_any_server():
+    """An agent enrolled by an earlier version keeps working unchanged."""
+    state = AgentState(agent_id="a1", agent_key="k1")
+
+    assert state.is_enrolled_for("https://anything.example")
+
+
+def test_an_unenrolled_state_belongs_to_no_server():
+    assert not AgentState().is_enrolled_for("https://a.example")

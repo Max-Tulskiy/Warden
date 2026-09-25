@@ -61,9 +61,16 @@ def main(argv: list[str] | None = None) -> None:
 
         def SvcDoRun(self) -> None:
             settings = load_settings(_DEFAULT_CONFIG_PATH)
+            # Reread on every look, so what the connection window saves reaches
+            # a service that has been waiting for it, with no restart.
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            task = loop.create_task(run(settings))
+            task = loop.create_task(
+                run(
+                    settings,
+                    reload_settings=lambda: load_settings(_DEFAULT_CONFIG_PATH),
+                )
+            )
             self._task, self._loop = task, loop
             if self._stop_requested:
                 task.cancel()

@@ -14,8 +14,12 @@ order.
 import asyncio
 from unittest.mock import AsyncMock
 
+import httpx
+
 from warden_agent.buffer import Buffer
 from warden_agent.core.scheduler import AgentScheduler
+from warden_agent.core.transport import FailureKind
+from warden_agent.status import StatusStore
 
 
 def _scheduler(tmp_path, *, client, collector, inventory_collector) -> AgentScheduler:
@@ -109,3 +113,112 @@ async def test_a_failing_tick_does_not_stop_the_loop(tmp_path):
     await scheduler.run_forever()
 
     assert client.poll_tasks.call_count >= 2
+
+
+def _status_scheduler(tmp_path, *, client, collector, inventory_collector):
+    return AgentScheduler(
+        client=client,
+        buffer=Buffer(tmp_path / "buffer.db"),
+        collectors=[collector],
+        inventory_collector=inventory_collector,
+        agent_id="a1",
+        agent_key="k1",
+        poll_interval_seconds=60,
+        inventory_interval_seconds=3600,
+        retention_hours=8,
+        max_window_hours=4,
+        status=StatusStore(tmp_path / "status.json"),
+    )
+
+
+async def _run_until(scheduler, condition) -> None:
+    async def sleep(_seconds: float) -> None:
+        await asyncio.sleep(0)
+        if condition():
+            scheduler.stop()
+
+    scheduler._sleep = sleep  # test-only override of the sleep hook
+    await scheduler.run_forever()
+
+
+async def test_a_successful_poll_and_inventory_record_the_last_contact(tmp_path):
+    client = AsyncMock()
+    client.poll_tasks.return_value = []
+    collector = AsyncMock()
+    collector.collect.return_value = []
+    inventory_collector = AsyncMock()
+    inventory_collector.snapshot.return_value = ({}, {})
+    scheduler = _status_scheduler(
+        tmp_path,
+        client=client,
+        collector=collector,
+        inventory_collector=inventory_collector,
+    )
+
+    await _run_until(
+        scheduler,
+        lambda: client.poll_tasks.await_count and client.push_inventory.await_count,
+    )
+
+    assert StatusStore(tmp_path / "status.json").read().last_success_at is not None
+    assert StatusStore(tmp_path / "status.json").read().last_error is None
+
+
+async def test_a_failing_poll_records_what_kind_of_failure_it_was(tmp_path):
+    client = AsyncMock()
+    client.poll_tasks.side_effect = httpx.ConnectError("no route")
+    collector = AsyncMock()
+    collector.collect.return_value = []
+    inventory_collector = AsyncMock()
+    inventory_collector.snapshot.return_value = ({}, {})
+    scheduler = _status_scheduler(
+        tmp_path,
+        client=client,
+        collector=collector,
+        inventory_collector=inventory_collector,
+    )
+
+    await _run_until(scheduler, lambda: client.poll_tasks.await_count >= 2)
+
+    assert (
+        StatusStore(tmp_path / "status.json").read().last_error
+        == FailureKind.UNREACHABLE.value
+    )
+
+
+async def test_a_failing_collector_is_not_reported_as_a_server_problem(tmp_path):
+    client = AsyncMock()
+    client.poll_tasks.return_value = []
+    collector = AsyncMock()
+    collector.collect.side_effect = RuntimeError("a collector crashed")
+    inventory_collector = AsyncMock()
+    inventory_collector.snapshot.return_value = ({}, {})
+    scheduler = _status_scheduler(
+        tmp_path,
+        client=client,
+        collector=collector,
+        inventory_collector=inventory_collector,
+    )
+
+    await _run_until(scheduler, lambda: collector.collect.await_count >= 2)
+
+    assert StatusStore(tmp_path / "status.json").read().last_error is None
+
+
+async def test_a_scheduler_without_a_status_store_runs_as_before(tmp_path):
+    client = AsyncMock()
+    client.poll_tasks.return_value = []
+    collector = AsyncMock()
+    collector.collect.return_value = []
+    inventory_collector = AsyncMock()
+    inventory_collector.snapshot.return_value = ({}, {})
+    scheduler = _scheduler(
+        tmp_path,
+        client=client,
+        collector=collector,
+        inventory_collector=inventory_collector,
+    )
+
+    await _run_until(scheduler, lambda: client.poll_tasks.await_count >= 1)
+
+    assert client.poll_tasks.await_count >= 1
