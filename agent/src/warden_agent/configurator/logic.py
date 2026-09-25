@@ -46,6 +46,13 @@ logger = logging.getLogger(__name__)
 #: How long the window waits for a server before calling it unreachable.
 CHECK_TIMEOUT_SECONDS = 10.0
 
+#: What a probe asks the server. The health check is not it: behind the
+#: deployment's proxy only `/api/*` reaches the server, and anything else is the
+#: panel, so an address that answers `/health` proves nothing. The authority
+#: endpoint is open, always answers, and answers in a way only the server does
+#: (see `_is_server_reply`).
+PROBE_PATH = "/api/v1/tls/ca"
+
 #: What a server may send as its authority; a certificate is far smaller.
 MAX_OFFER_BYTES = 64 * 1024
 
@@ -188,7 +195,7 @@ class ProbeResult:
 async def probe(
     server_url: str, *, ca_file: Path | None = None, extra_ca_pem: str | None = None
 ) -> ProbeResult:
-    """Reach the server's health check with certificate checking on.
+    """Reach the server with certificate checking on.
 
     `ca_file` is the authority already configured, `extra_ca_pem` one being
     considered but not yet saved. Raises `NotConfiguredError` when `ca_file`
@@ -201,24 +208,32 @@ async def probe(
         async with httpx.AsyncClient(
             base_url=server_url, verify=context, timeout=CHECK_TIMEOUT_SECONDS
         ) as client:
-            response = await client.get("/health")
+            response = await client.get(PROBE_PATH)
     except httpx.HTTPError as exc:
         if classify_failure(exc) is FailureKind.CERTIFICATE_NOT_TRUSTED:
             return ProbeResult(ProbeKind.NOT_TRUSTED)
         return ProbeResult(ProbeKind.UNREACHABLE)
-    if _is_health_reply(response):
+    if _is_server_reply(response):
         return ProbeResult(ProbeKind.TRUSTED)
     return ProbeResult(ProbeKind.UNEXPECTED, response.status_code)
 
 
-def _is_health_reply(response: httpx.Response) -> bool:
-    if response.status_code != httpx.codes.OK:
-        return False
+def _is_server_reply(response: httpx.Response) -> bool:
+    """Whether this is what the Warden server answers at `PROBE_PATH`.
+
+    Either the authority itself, or the 404 of a deployment with a certificate
+    from a public authority; both are JSON in the server's own shape. A page, a
+    proxy's error, or another server's JSON is not.
+    """
     try:
         body = response.json()
     except ValueError:
         return False
-    return isinstance(body, dict) and body.get("status") == "ok"
+    if not isinstance(body, dict):
+        return False
+    if response.status_code == httpx.codes.OK:
+        return "pem" in body
+    return response.status_code == httpx.codes.NOT_FOUND and "detail" in body
 
 
 def normalize_fingerprint(text: str) -> str | None:

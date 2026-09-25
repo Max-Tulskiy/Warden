@@ -22,7 +22,7 @@ def _independent_fingerprint(pem: str) -> str:
 
 
 async def test_a_trusted_server_is_reported_reachable_and_trusted(tls_server):
-    tls_server.answer("GET", "/health", body={"status": "ok"})
+    tls_server.answer("GET", "/api/v1/tls/ca", body={"pem": tls_server.authority_pem})
 
     result = await probe(tls_server.url, extra_ca_pem=tls_server.authority_pem)
 
@@ -30,7 +30,7 @@ async def test_a_trusted_server_is_reported_reachable_and_trusted(tls_server):
 
 
 async def test_a_configured_authority_file_counts_as_trusted(tls_server, tmp_path):
-    tls_server.answer("GET", "/health", body={"status": "ok"})
+    tls_server.answer("GET", "/api/v1/tls/ca", body={"pem": tls_server.authority_pem})
     ca_file = tmp_path / "server-ca.pem"
     ca_file.write_text(tls_server.authority_pem)
 
@@ -38,7 +38,7 @@ async def test_a_configured_authority_file_counts_as_trusted(tls_server, tmp_pat
 
 
 async def test_a_server_with_an_unknown_authority_is_reported_not_trusted(tls_server):
-    tls_server.answer("GET", "/health", body={"status": "ok"})
+    tls_server.answer("GET", "/api/v1/tls/ca", body={"pem": tls_server.authority_pem})
 
     result = await probe(tls_server.url)
 
@@ -50,14 +50,28 @@ async def test_an_address_nothing_listens_on_is_reported_unreachable(unreachable
     assert (await probe(unreachable_url)).kind is ProbeKind.UNREACHABLE
 
 
+async def test_a_server_with_no_authority_of_its_own_is_still_the_server(tls_server):
+    """Its 404 is what a deployment with a certificate from a public authority says."""
+    tls_server.answer("GET", "/api/v1/tls/ca", 404, {"detail": "none"})
+
+    result = await probe(tls_server.url, extra_ca_pem=tls_server.authority_pem)
+
+    assert result.kind is ProbeKind.TRUSTED
+
+
 @pytest.mark.parametrize(
     ("status", "body"),
-    [(404, {"detail": "no"}), (200, {"hello": "world"}), (200, None)],
+    [
+        (404, {"hello": "world"}),
+        (200, {"hello": "world"}),
+        (200, None),
+        (500, {"detail": "boom"}),
+    ],
 )
 async def test_an_address_that_is_not_the_server_is_an_unexpected_reply(
     tls_server, status, body
 ):
-    tls_server.answer("GET", "/health", status, body)
+    tls_server.answer("GET", "/api/v1/tls/ca", status, body)
 
     result = await probe(tls_server.url, extra_ca_pem=tls_server.authority_pem)
 

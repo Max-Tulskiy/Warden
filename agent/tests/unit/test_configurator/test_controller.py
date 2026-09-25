@@ -82,7 +82,6 @@ def controller(backend) -> WindowController:
 
 @pytest.fixture
 def server(tls_server):
-    tls_server.answer("GET", "/health", body={"status": "ok"})
     tls_server.answer("GET", "/api/v1/agents/a1/tasks", body=[])
     tls_server.on(
         "POST",

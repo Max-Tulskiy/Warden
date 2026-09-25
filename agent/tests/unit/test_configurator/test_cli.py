@@ -31,7 +31,6 @@ def backend(tmp_path) -> _Backend:
 
 @pytest.fixture
 def server(tls_server):
-    tls_server.answer("GET", "/health", body={"status": "ok"})
     tls_server.on(
         "POST",
         "/api/v1/enroll",

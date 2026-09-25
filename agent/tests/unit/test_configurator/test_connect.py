@@ -42,7 +42,6 @@ def server(tls_server):
             return 201, {"agent_id": "a1", "agent_key": "k1"}
         return 400, {"detail": "Invalid or expired enrollment token"}
 
-    tls_server.answer("GET", "/health", body={"status": "ok"})
     tls_server.answer("GET", "/api/v1/agents/a1/tasks", body=[])
     tls_server.on("POST", "/api/v1/enroll", enroll)
     tls_server.answer("GET", "/api/v1/tls/ca", body={"pem": tls_server.authority_pem})
@@ -155,7 +154,7 @@ async def test_a_server_already_trusted_is_connected_without_any_trust_decision(
     outcome = await connect(paths, server_url=server.url, token=ONE_TIME_CODE)
 
     assert isinstance(outcome, Connected)
-    assert "/api/v1/tls/ca" not in _paths_asked(server)
+    assert "trust" not in paths.log.read_text()  # none offered, none accepted
     assert paths.authority.read_text() == server.authority_pem
 
 
@@ -191,7 +190,7 @@ async def test_each_kind_of_failure_is_told_apart(server, paths, unreachable_url
 
 
 async def test_a_server_that_is_not_the_server_is_an_unexpected_reply(server, paths):
-    server.answer("GET", "/health", 404, {"detail": "no"})
+    server.answer("GET", "/api/v1/tls/ca", 200, {"a": "page that is not the server"})
     write_config(paths.config, {"ca_file": paths.authority})
     paths.authority.write_text(server.authority_pem)
 

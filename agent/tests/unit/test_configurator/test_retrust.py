@@ -34,7 +34,6 @@ def paths(tmp_path) -> AgentPaths:
 @pytest.fixture
 def enrolled(tls_server, paths):
     """A station enrolled through the window, against the test server."""
-    tls_server.answer("GET", "/health", body={"status": "ok"})
     tls_server.answer("GET", "/api/v1/agents/a1/tasks", body=[])
     tls_server.on(
         "POST",
