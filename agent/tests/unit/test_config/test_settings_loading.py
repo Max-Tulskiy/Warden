@@ -34,3 +34,12 @@ def test_a_missing_file_path_falls_back_to_defaults(tmp_path):
 def test_retention_below_the_request_window_cap_is_rejected():
     with pytest.raises(ValidationError, match="at least 4 hours"):
         AgentSettings(retention_hours=2)
+
+
+def test_a_trusted_authority_file_is_optional_and_read_from_the_file(tmp_path):
+    assert load_settings(None).ca_file is None
+
+    config_file = tmp_path / "config.toml"
+    config_file.write_text("ca_file = '/etc/warden-agent/server-ca.pem'\n")
+
+    assert str(load_settings(config_file).ca_file).endswith("server-ca.pem")

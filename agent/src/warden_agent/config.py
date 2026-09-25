@@ -29,6 +29,10 @@ class AgentSettings(BaseSettings):
     retention_hours: int = 8
     buffer_path: Path = Path("warden-agent.db")
     state_path: Path = Path("warden-agent-state.json")
+    #: A certificate the agent trusts in addition to the system's own store and
+    #: the bundle shipped with it: the authority of a server that issues its own
+    #: certificate. Trust given this way is the agent's alone.
+    ca_file: Path | None = None
 
     @field_validator("retention_hours")
     @classmethod

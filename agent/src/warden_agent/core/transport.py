@@ -9,13 +9,18 @@ again, so it is raised immediately instead.
 
 import asyncio
 import logging
+import ssl
 from collections.abc import Awaitable, Callable
 from datetime import datetime
+from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
+import certifi
 import httpx
 
 from warden_agent.core.models import OutgoingEvent, TaskDTO
+from warden_agent.errors import NotConfiguredError
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +31,80 @@ class EnrollmentError(RuntimeError):
     """Raised when the server rejects an enrollment token."""
 
 
+class FailureKind(StrEnum):
+    """What went wrong in a request to the server, in the terms a person acts on.
+
+    The values are the codes the status file stores; the connection window turns
+    them into Russian sentences, so no raw library text is ever stored or shown.
+    """
+
+    UNREACHABLE = "unreachable"
+    CERTIFICATE_NOT_TRUSTED = "certificate_not_trusted"
+    CREDENTIAL_REFUSED = "credential_refused"
+    SERVER_ERROR = "server_error"
+    OTHER = "other"
+
+
+def _cause_chain(exc: BaseException) -> list[BaseException]:
+    chain: list[BaseException] = []
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        chain.append(current)
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return chain
+
+
+def _status_kind(code: int) -> FailureKind:
+    if code in (httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN):
+        return FailureKind.CREDENTIAL_REFUSED
+    if code >= httpx.codes.INTERNAL_SERVER_ERROR:
+        return FailureKind.SERVER_ERROR
+    return FailureKind.OTHER
+
+
+def classify_failure(exc: BaseException) -> FailureKind:
+    """Sort a failed request into a `FailureKind`, walking the cause chain once."""
+    chain = _cause_chain(exc)
+    status_errors = [i for i in chain if isinstance(i, httpx.HTTPStatusError)]
+    if any(isinstance(item, ssl.SSLCertVerificationError) for item in chain):
+        return FailureKind.CERTIFICATE_NOT_TRUSTED
+    if any(isinstance(item, EnrollmentError) for item in chain):
+        return FailureKind.CREDENTIAL_REFUSED
+    if status_errors:
+        return _status_kind(status_errors[0].response.status_code)
+    if any(isinstance(item, httpx.TransportError) for item in chain):
+        return FailureKind.UNREACHABLE
+    return FailureKind.OTHER
+
+
+def build_ssl_context(ca_file: Path | None = None) -> ssl.SSLContext:
+    """The context every agent request is verified with.
+
+    The system's own store (which the `ssl` module loads by itself on Windows,
+    so a certificate an organization distributes to its workstations works),
+    the bundle shipped with `certifi` (httpx's own default, kept so trust the
+    agent has today is not lost), and `ca_file` when one is configured. Nothing
+    here turns checking off.
+    """
+    context = ssl.create_default_context()
+    context.load_verify_locations(cafile=certifi.where())
+    if ca_file is not None:
+        try:
+            context.load_verify_locations(cafile=str(ca_file))
+        except (OSError, ssl.SSLError) as exc:
+            raise NotConfiguredError(
+                f"the trusted authority {ca_file} cannot be used",
+                reason="ca_unreadable",
+            ) from exc
+    return context
+
+
 class ServerClient:
-    def __init__(
+    # Every parameter after `base_url` is a keyword-only knob a caller or a test
+    # injects on its own (timeouts, the transport, the sleep, the trust context).
+    def __init__(  # noqa: PLR0913
         self,
         base_url: str,
         *,
@@ -35,9 +112,15 @@ class ServerClient:
         max_attempts: int = 5,
         transport: httpx.AsyncBaseTransport | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        verify: ssl.SSLContext | None = None,
     ) -> None:
+        # `verify` is an SSL context built by `build_ssl_context`; without one
+        # httpx keeps its own default (the `certifi` bundle).
         self._client = httpx.AsyncClient(
-            base_url=base_url, timeout=timeout, transport=transport
+            base_url=base_url,
+            timeout=timeout,
+            transport=transport,
+            verify=True if verify is None else verify,
         )
         self._max_attempts = max_attempts
         self._sleep = sleep
