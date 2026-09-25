@@ -294,6 +294,97 @@ def test_a_report_over_the_event_limit_is_rejected_by_the_endpoint(
     assert response.status_code == 422
 
 
+def test_an_occurrence_from_overlapping_requests_is_reported_once(
+    client, auth_headers, enrolled_agent, agent_headers, db_session
+):
+    """Covers specs/007-event-deduplication/spec.md A-1 and A-3."""
+    agent_id = enrolled_agent["agent_id"]
+    window_start = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
+    shared = window_start + timedelta(minutes=30)
+
+    # First window: 10:00-12:00 (via `_place_and_dispatch`), answered with
+    # the shared occurrence plus one event unique to this window.
+    first_task = _place_and_dispatch(
+        client, auth_headers, agent_headers, agent_id, window_start
+    )
+    client.post(
+        f"/api/v1/agents/{agent_id}/reports",
+        headers=agent_headers,
+        json={
+            "task_id": first_task,
+            "events": [
+                {
+                    "category": "processes",
+                    "occurred_at": shared.isoformat(),
+                    "payload": {"name": "shared.exe", "pid": 1},
+                },
+                {
+                    "category": "processes",
+                    "occurred_at": window_start.isoformat(),
+                    "payload": {"name": "first-only.exe", "pid": 2},
+                },
+            ],
+        },
+    )
+
+    # Second, overlapping window: 10:30-12:30, answered with the same
+    # shared occurrence plus one event unique to this window.
+    overlapping_start = window_start + timedelta(minutes=30)
+    placed = client.post(
+        f"/api/v1/agents/{agent_id}/requests",
+        headers=auth_headers,
+        json={
+            "window_start": overlapping_start.isoformat(),
+            "window_end": (overlapping_start + timedelta(hours=2)).isoformat(),
+        },
+    )
+    second_task = placed.json()["id"]
+    client.get(f"/api/v1/agents/{agent_id}/tasks", headers=agent_headers)
+    second_response = client.post(
+        f"/api/v1/agents/{agent_id}/reports",
+        headers=agent_headers,
+        json={
+            "task_id": second_task,
+            "events": [
+                {
+                    "category": "processes",
+                    "occurred_at": shared.isoformat(),
+                    "payload": {"name": "shared.exe", "pid": 1},
+                },
+                {
+                    "category": "processes",
+                    "occurred_at": (overlapping_start + timedelta(hours=1)).isoformat(),
+                    "payload": {"name": "second-only.exe", "pid": 3},
+                },
+            ],
+        },
+    )
+    assert second_response.status_code == 204
+
+    events = client.get(
+        f"/api/v1/agents/{agent_id}/events",
+        headers=auth_headers,
+        params={"report_date": window_start.date().isoformat()},
+    )
+    names = sorted(event["payload"]["name"] for event in events.json())
+    assert names == ["first-only.exe", "second-only.exe", "shared.exe"]
+
+    audit_rows = list(
+        db_session.execute(
+            select(AuditLogEntry)
+            .where(AuditLogEntry.action == "agent.report")
+            # `id` is a random UUID (models/audit.py), not an autoincrement
+            # counter, so it carries no chronological order; `occurred_at`
+            # does, since each `log_event` call stamps it as it happens.
+            .order_by(AuditLogEntry.occurred_at)
+        )
+        .scalars()
+        .all()
+    )
+    assert audit_rows[0].detail == {"event_count": 2, "new_count": 2}
+    assert audit_rows[1].detail == {"event_count": 2, "new_count": 1}
+
+
 def test_daily_report_events_are_paginated(
     client, auth_headers, enrolled_agent, agent_headers
 ):

@@ -214,14 +214,14 @@ def submit_report(
             detail="Report contains events outside the requested window",
         )
 
-    tasks_service.complete_task(db, task=task, events=payload.events)
+    stored = tasks_service.complete_task(db, task=task, events=payload.events)
     agent.last_seen_at = datetime.now(UTC)
     log_event(
         db,
         actor=str(agent.id),
         action="agent.report",
         target=str(task.id),
-        detail={"event_count": len(payload.events)},
+        detail={"event_count": len(payload.events), "new_count": len(stored)},
     )
     db.commit()
     return Response(status_code=204)

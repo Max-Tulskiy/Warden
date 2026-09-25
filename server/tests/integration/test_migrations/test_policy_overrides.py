@@ -78,7 +78,8 @@ def test_downgrading_drops_the_table_and_keeps_the_rest(database):
             "'ADMIN', 'ACTIVE')"
         )
 
-    command.downgrade(_alembic(), "-1")
+    # To the revision before the policy table, not `-1`: later revisions sit above it.
+    command.downgrade(_alembic(), BEFORE_POLICY)
 
     assert "policy_overrides" not in _tables(database)
     with sqlite3.connect(database) as connection:

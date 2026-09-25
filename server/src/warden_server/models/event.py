@@ -20,9 +20,16 @@ class EventCategory(StrEnum):
 
 class Event(Base):
     __tablename__ = "events"
-    # Serves the cross-station report, which filters on time alone; without it
-    # that query would scan the whole table.
-    __table_args__ = (Index("ix_events_occurred_at", "occurred_at"),)
+    __table_args__ = (
+        # Serves the cross-station report, which filters on time alone;
+        # without it that query would scan the whole table.
+        Index("ix_events_occurred_at", "occurred_at"),
+        # Serves the daily report's per-station range query and the
+        # already-known-event lookup that backs deduplication on ingestion
+        # (specs/007-event-deduplication/), both of which filter on a
+        # station together with a time range or exact timestamps.
+        Index("ix_events_agent_id_occurred_at", "agent_id", "occurred_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     agent_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agents.id"))

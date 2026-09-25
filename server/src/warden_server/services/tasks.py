@@ -6,8 +6,10 @@ agent picks it up on its next poll, and later completes it by delivering
 events.
 """
 
+import json
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -60,7 +62,49 @@ def fetch_and_dispatch_pending(db: Session, *, agent_id: uuid.UUID) -> list[Task
     return tasks
 
 
+def _drop_already_known(
+    db: Session, *, agent_id: uuid.UUID, events: list[EventIn]
+) -> list[EventIn]:
+    """Filter out events this station has already delivered.
+
+    Overlapping window requests can answer with the same buffered occurrence
+    more than once (specs/007-event-deduplication/spec.md R-1); an occurrence
+    is the same one only if it matches on category, timestamp, and payload
+    for the same station -- never across stations, and never merely because
+    two events happen to be similar. Candidates are narrowed by `agent_id`
+    and `occurred_at` (both indexed) before comparing category and payload in
+    Python, which sidesteps writing dialect-specific JSON-equality SQL for
+    SQLite's plain `JSON` column versus PostgreSQL's `JSONB`.
+    """
+    if not events:
+        return events
+    occurred_ats = {event.occurred_at for event in events}
+    existing = db.execute(
+        select(Event.category, Event.occurred_at, Event.payload).where(
+            Event.agent_id == agent_id, Event.occurred_at.in_(occurred_ats)
+        )
+    ).all()
+    known = {(row.category, row.occurred_at, _freeze(row.payload)) for row in existing}
+    return [
+        event
+        for event in events
+        if (event.category, event.occurred_at, _freeze(event.payload)) not in known
+    ]
+
+
+def _freeze(payload: dict[str, Any]) -> str:
+    """A canonical, hashable string form of a JSON payload for set membership.
+
+    A payload's shape is not fixed to flat key/value pairs (`EventIn.payload`
+    is `dict[str, Any]`), so comparing it by sorted top-level items alone
+    would break on a nested list or dict; `json.dumps(..., sort_keys=True)`
+    canonicalizes recursively and is always hashable.
+    """
+    return json.dumps(payload, sort_keys=True)
+
+
 def complete_task(db: Session, *, task: Task, events: list[EventIn]) -> list[Event]:
+    fresh = _drop_already_known(db, agent_id=task.agent_id, events=events)
     stored = [
         Event(
             agent_id=task.agent_id,
@@ -69,7 +113,7 @@ def complete_task(db: Session, *, task: Task, events: list[EventIn]) -> list[Eve
             occurred_at=event.occurred_at,
             payload=event.payload,
         )
-        for event in events
+        for event in fresh
     ]
     db.add_all(stored)
     task.status = TaskStatus.COMPLETED
