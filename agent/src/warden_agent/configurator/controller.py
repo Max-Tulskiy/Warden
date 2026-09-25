@@ -80,6 +80,8 @@ class WindowState:
     status_lines: list[tuple[str, str]] = field(default_factory=list)
     pending_trust: TrustOffer | None = None
     pending_replace: str | None = None
+    #: What the pending trust question is for, so the dialog can word its button.
+    trust_for: Literal["connect", "retrust"] = "connect"
     offers_retrust: bool = False
 
     @property
@@ -96,7 +98,6 @@ class WindowController:
         self._backend = backend
         self._executor = executor
         self._listeners: list[Callable[[], None]] = []
-        self._trust_for: Literal["connect", "retrust"] = "connect"
         #: A move to another server that a person confirmed, remembered across
         #: the trust question that may follow it.
         self._replace_confirmed = False
@@ -151,7 +152,7 @@ class WindowController:
         self._start_connect(trust=None, replace=False)
 
     def begin_retrust(self) -> None:
-        self._trust_for = "retrust"
+        self.state.trust_for = "retrust"
         self._start(lambda: begin_retrust(self._backend.paths), self._connected)
 
     def answer_trust(self, accepted: bool) -> None:
@@ -163,7 +164,7 @@ class WindowController:
             self._replace_confirmed = False
             self._say(messages.TRUST_NOT_GIVEN, error=True)
             return
-        if self._trust_for == "retrust":
+        if self.state.trust_for == "retrust":
             self._start(self._retrust_flow(offer), self._retrusted)
         else:
             self._start_connect(trust=offer, replace=self._replace_confirmed)
@@ -180,7 +181,7 @@ class WindowController:
 
     def _start_connect(self, *, trust: TrustOffer | None, replace: bool) -> None:
         address, token = self.state.address, self.state.token
-        self._trust_for = "connect"
+        self.state.trust_for = "connect"
 
         async def work() -> Any:
             outcome = await connect(

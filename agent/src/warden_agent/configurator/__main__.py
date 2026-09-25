@@ -9,7 +9,6 @@ import sys
 
 from warden_agent.configurator.backend import LocalBackend
 from warden_agent.configurator.cli import (
-    EXIT_NOT_CONNECTED,
     build_parser,
     execute,
     parse_args,
@@ -23,8 +22,11 @@ def main(argv: list[str] | None = None) -> None:
         build_parser().error("--config is required")
     backend = LocalBackend(AgentPaths.for_directory(args.config.parent))
     if args.gui:
-        # Filled in with the window itself.
-        raise SystemExit(EXIT_NOT_CONNECTED)
+        # Qt is imported only when the window is asked for, so the command line
+        # works on a machine that does not have it.
+        from warden_agent.configurator.view import run_window  # noqa: PLC0415
+
+        raise SystemExit(run_window(backend))
     raise SystemExit(execute(args, backend))
 
 

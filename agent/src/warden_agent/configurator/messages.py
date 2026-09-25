@@ -110,3 +110,36 @@ TRUST_UPDATED = "Доверие к серверу {server} обновлено."
 UNEXPECTED_FAILURE = (
     "Не удалось выполнить действие. Подробности записаны в журнал настройки."
 )
+
+# The window's own furniture.
+GROUP_CONNECTION = "Подключение к серверу"
+GROUP_STATE = "Состояние"
+LABEL_SERVER = "Адрес сервера"
+LABEL_ENROLLMENT = "Токен регистрации"
+PLACEHOLDER_ADDRESS = "Например, https://warden.example.internal"
+BUTTON_CHECK = "Проверить соединение"
+BUTTON_CONNECT = "Подключить"
+BUTTON_RETRUST = "Доверять новому сертификату"
+BUTTON_TRUST = "Доверять"
+BUTTON_TRUST_AND_CONNECT = "Доверять и подключить"
+BUTTON_CANCEL = "Отмена"
+BUTTON_REPLACE = "Заменить"
+
+# The question about an authority nobody has trusted yet.
+TRUST_TITLE = "Сервер использует собственный центр сертификации"
+TRUST_INTRO = (
+    "Сертификат сервера выдан центром сертификации, которого эта станция не "
+    "знает. Сравните отпечаток ниже с отпечатком в панели (раздел «Станции»). "
+    "Доверяйте, только если они совпадают."
+)
+TRUST_ISSUER = "Кем выдан"
+TRUST_VALID_UNTIL = "Действителен до"
+TRUST_FINGERPRINT = "Отпечаток SHA-256"
+
+# The question about moving an enrolled station.
+REPLACE_TITLE = "Сменить сервер станции?"
+REPLACE_TEXT = (
+    "Станция зарегистрирована на сервере {current}. Чтобы подключить её к "
+    "другому серверу, её нужно зарегистрировать заново; ключ прежней "
+    "регистрации будет забыт."
+)

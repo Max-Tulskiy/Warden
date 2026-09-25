@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from warden_agent.configurator.__main__ import main
 from warden_agent.configurator.backend import LocalBackend, ServiceState
 from warden_agent.configurator.cli import EXIT_CONNECTED, EXIT_NOT_CONNECTED, run_cli
 from warden_agent.configurator.logic import fetch_authority
@@ -193,3 +194,11 @@ def test_apply_and_check_need_a_server(backend, capsys):
 
     assert excited.value.code == 2
     assert "--server" in capsys.readouterr().err
+
+
+def test_the_tool_needs_to_be_told_which_configuration_to_work_on(capsys):
+    with pytest.raises(SystemExit) as refused:
+        main(["--check", "--server", "https://a.example"])
+
+    assert refused.value.code == 2
+    assert "--config" in capsys.readouterr().err
