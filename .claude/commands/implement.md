@@ -1,6 +1,6 @@
 ---
 description: Carry out a spec's tasks in order, checking them off
-argument-hint: <NNN-name of the spec, or empty — inferred from the current branch/latest spec>
+argument-hint: <NNN-name of the spec, or empty — the latest spec>
 ---
 
 Implement the tasks from: **$ARGUMENTS**

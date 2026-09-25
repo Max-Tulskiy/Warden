@@ -1,14 +1,14 @@
 ---
 description: Break a finished plan into numbered, verifiable tasks
-argument-hint: <NNN-name of the spec, or empty — inferred from the current branch/latest spec>
+argument-hint: <NNN-name of the spec, or empty — the latest spec>
 ---
 
 Create the task list for: **$ARGUMENTS**
 
 Steps:
 
-1. Find `specs/NNN-name/plan.md` (by argument, by the current git branch, or
-   the most recent directory with a `plan.md` but no `tasks.md`).
+1. Find `specs/NNN-name/plan.md` (by argument, or the most recent
+   directory with a `plan.md` but no `tasks.md`).
 2. Create `specs/NNN-name/tasks.md` from `.specify/templates/tasks-template.md`.
 
 Content requirements:

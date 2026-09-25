@@ -1,6 +1,6 @@
 ---
 description: Create an implementation plan from a finished spec (how, with a constitution check)
-argument-hint: <NNN-name of the spec, or empty — inferred from the current branch/latest spec>
+argument-hint: <NNN-name of the spec, or empty — the latest spec>
 ---
 
 Create an implementation plan for: **$ARGUMENTS**
@@ -8,8 +8,8 @@ Create an implementation plan for: **$ARGUMENTS**
 Steps:
 
 1. Read `.specify/memory/constitution.md`.
-2. Find `specs/NNN-name/spec.md` (by argument, by the current git branch, or
-   the most recent directory without a `plan.md`). If the spec still has
+2. Find `specs/NNN-name/spec.md` (by argument, or the most recent
+   directory without a `plan.md`). If the spec still has
    `[NEEDS CLARIFICATION: ...]` markers, stop and list them for the user — a
    plan is not written against an incomplete spec.
 3. Create `specs/NNN-name/plan.md` from `.specify/templates/plan-template.md`.

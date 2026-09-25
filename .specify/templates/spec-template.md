@@ -1,6 +1,6 @@
 # Spec: [FEATURE NAME]
 
-**Directory:** `specs/NNN-name/` · **Branch:** `NNN-name` · **Status:** draft · **Date:** YYYY-MM-DD
+**Directory:** `specs/NNN-name/` · **Status:** draft · **Date:** YYYY-MM-DD
 
 > This document answers **what** and **why**. Module, class, function, and file
 > names do not belong here — they appear in `plan.md`.

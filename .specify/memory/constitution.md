@@ -1,6 +1,6 @@
 # Warden Project Constitution
 
-**Version:** 1.3.1 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-25
+**Version:** 1.3.2 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-25
 
 This document defines the project's purpose, mandatory development principles,
 its structure, and the decisions already made. The constitution takes priority
@@ -436,8 +436,8 @@ Rules:
 * A plan that violates a Section I principle is not carried out: either the
   plan changes, or the constitution is amended through the Section VII
   procedure.
-* A spec's directory is numbered with a three-digit prefix; a matching git
-  branch is created when working under git.
+* A spec's directory is numbered with a three-digit prefix. Work is committed
+  straight to `main`; no branch is created per spec.
 * A spec is not deleted after implementation — it remains as a record of the
   decision.
 
@@ -563,3 +563,4 @@ What Warden does not do and does not promise:
 | 1.2.0 | 2026-09-24 | MINOR: added decision D-10 (two roles, an administrator and an observer, enforced by the server on every request with the role read from the database and not carried in the token; accounts are disabled, never deleted) and three Section V boundaries that come with it: an observer sees everything collected, an initial or reset password is known to the administrator who set it, and two administrators acting on each other at once can leave none active. The Section V sessions boundary was widened to say an administrator can also end an operator's sessions. See `specs/005-operator-management/` |
 | 1.3.0 | 2026-09-24 | MINOR: added decision D-11 (the request window limit, the enrollment token lifetime, and the session lifetime are stored as one saved set, edited by administrators within fixed bounds, and read afresh at every use; the four-hour window ceiling is a constant in code and the server's configuration is the default) and three Section V boundaries that come with it: a change applies only from the next use, one policy serves the whole deployment with the audit log as its only history, and a saved policy outranks the configuration until it is reset. See `specs/006-editable-policy/` |
 | 1.3.1 | 2026-09-25 | PATCH: Section V lost the boundary noting that overlapping window requests could store the same event twice — `specs/007-event-deduplication/` closes it: ingestion now stores an event once per station, matched on category, timestamp, and payload. No principle or decision changed |
+| 1.3.2 | 2026-09-25 | PATCH: Section IV no longer asks for a git branch per spec; work is committed straight to `main`. The spec template's branch field and the workflow commands that offered a branch or looked one up were brought in line. No principle or decision changed |

@@ -12,9 +12,8 @@ Steps:
 2. Look at existing directories under `specs/` and pick the next free
    three-digit number. Build a short kebab-case English slug, e.g.
    `004-daily-reports`.
-3. If the project is under git and the current branch does not match the new
-   feature, offer to create a branch with the same name as the directory.
-4. Create `specs/NNN-name/spec.md` from `.specify/templates/spec-template.md`.
+3. Create `specs/NNN-name/spec.md` from `.specify/templates/spec-template.md`.
+   Do not create a git branch for it: work is committed to `main`.
 
 Content requirements:
 
