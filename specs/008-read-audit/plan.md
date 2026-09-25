@@ -1,6 +1,6 @@
 # Implementation plan: Record who views collected data and the audit log
 
-**Spec:** [./spec.md](./spec.md) · **Status:** draft · **Date:** 2026-09-25
+**Spec:** [./spec.md](./spec.md) · **Status:** done · **Date:** 2026-09-25
 
 ---
 

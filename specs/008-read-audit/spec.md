@@ -1,6 +1,6 @@
 # Spec: Record who views collected data and the audit log
 
-**Directory:** `specs/008-read-audit/` · **Status:** draft · **Date:** 2026-09-25
+**Directory:** `specs/008-read-audit/` · **Status:** done · **Date:** 2026-09-25
 
 ---
 

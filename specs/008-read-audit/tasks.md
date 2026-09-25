@@ -1,6 +1,6 @@
 # Tasks: Record who views collected data and the audit log
 
-**Plan:** [./plan.md](./plan.md) · **Status:** draft · **Date:** 2026-09-25
+**Plan:** [./plan.md](./plan.md) · **Status:** done · **Date:** 2026-09-25
 
 > Each task is a verifiable outcome (a test, a handler, a screen), not an
 > abstract action. Check it off with `[x]` once done.
@@ -38,9 +38,9 @@
 
 ## Verification
 
-- [ ] T-14. Run `ruff check .`, `ruff format --check .`, `mypy src alembic`, and `bandit -c pyproject.toml -r src` in `server/` — all clean
-- [ ] T-15. Run the full server suite with `pytest --cov=warden_server --cov-report=xml --cov-fail-under=80` and `diff-cover coverage.xml --compare-branch=main --fail-under=80` — green, changed-code coverage at least 80%
-- [ ] T-16. Run `npm run lint`, `npm run format`, `npm test`, and `npm run build` in `web/` — all clean
-- [ ] T-17. Manual pass on the real compose stack (Caddy and PostgreSQL, a throwaway project on remapped ports because the user's `gitlab` container holds 80 and 443): sign in as an administrator, create an observer, view a report and an inventory history as each, open the audit log, and confirm the entries, the `view` group filter, and the hint in a real browser
-- [ ] T-18. Repository checks: no `sys.platform`/`platform.system`/platform import in the touched server files (principle 1); a case-insensitive search of the repository (excluding `node_modules`, `.git`, `.venv`) for the project's retired transliterated name finds nothing; `docs/ru` and `docs/en` have matching headings for the pages changed; everything added under `specs/008-read-audit/` is English apart from Russian UI text quoted verbatim to identify it
-- [ ] T-19. Record the outcome and the limits of T-17 in the honest-status section of `docs/ru/usage.md` and `docs/en/usage.md` (a script stood in for the agents, one browser), then set **Status** to `done` in `spec.md`, `plan.md`, and this file
+- [x] T-14. Run `ruff check .`, `ruff format --check .`, `mypy src alembic`, and `bandit -c pyproject.toml -r src` in `server/` — all clean
+- [x] T-15. Run the full server suite with `pytest --cov=warden_server --cov-report=xml --cov-fail-under=80` and `diff-cover coverage.xml --compare-branch=main --fail-under=80` — green, changed-code coverage at least 80%
+- [x] T-16. Run `npm run lint`, `npm run format`, `npm test`, and `npm run build` in `web/` — all clean (on the maintainer's Node 26 the suite needs `NODE_OPTIONS=--no-experimental-webstorage`: the built-in `localStorage` breaks 13 unrelated tests in `authProvider.test.tsx`, with or without this change; CI runs Node 22)
+- [x] T-17. Manual pass on the real compose stack (Caddy and PostgreSQL, a throwaway project on remapped ports because the user's `gitlab` container holds 80 and 443): sign in as an administrator, create an observer, view a report and an inventory history as each, open the audit log, and confirm the entries, the `view` group filter, and the hint in a real browser
+- [x] T-18. Repository checks: no `sys.platform`/`platform.system`/platform import in the touched server files (principle 1); a case-insensitive search of the repository (excluding `node_modules`, `.git`, `.venv`) for the project's retired transliterated name finds nothing; `docs/ru` and `docs/en` have matching headings for the pages changed; everything added under `specs/008-read-audit/` is English apart from Russian UI text quoted verbatim to identify it
+- [x] T-19. Record the outcome and the limits of T-17 in the honest-status section of `docs/ru/usage.md` and `docs/en/usage.md` (a script stood in for the agents, one browser), then set **Status** to `done` in `spec.md`, `plan.md`, and this file
