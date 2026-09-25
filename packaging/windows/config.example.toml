@@ -1,20 +1,25 @@
-# Installed by the .msi as %ProgramData%\Warden\agent\config.toml. Fill in
-# server_url and enrollment_token, then restart the WardenAgent service.
+# Installed by the .msi as %ProgramData%\Warden\agent\config.toml.
+#
+# Connect the station to a server with the installer's wizard or with
+# "Warden Agent" from the Start menu: either writes server_url here, and
+# ca_file too when it was told to trust a certificate authority the server
+# issues its certificate from. The one-time enrollment token is never
+# written to this file.
+#
 # Values here take precedence over the WARDEN_AGENT_* environment variables
 # of the same name; anything left out falls back to the environment
 # variable, then to the default in warden_agent.config.
 #
-# The Windows copy of agent/config.example.toml: the same settings, with
-# the agent's own files kept in this directory, which the installer
-# restricts to SYSTEM and Administrators.
+# The Windows copy of agent/config.example.toml, except for the connection
+# settings (server_url, enrollment_token), which the wizard and the window
+# fill in, and with the agent's own files kept in this directory, which the
+# installer restricts to SYSTEM and Administrators.
 
-server_url = "https://warden.example.internal"
+# server_url = "https://warden.example.internal"
 
-# One-time token issued by an administrator (POST /api/v1/enrollment-tokens
-# on the server). Only needed for the very first start -- once enrolled,
-# the agent's id and key live in state_path below and this line can be
-# removed.
-enrollment_token = "REPLACE-WITH-A-REAL-ENROLLMENT-TOKEN"
+# A certificate authority the agent trusts in addition to the system's own
+# store. Single quotes: TOML literal strings, so the backslashes stay as written.
+# ca_file = 'C:\ProgramData\Warden\agent\server-ca.pem'
 
 # Defaults to the OS hostname if left unset.
 # hostname = "WORKSTATION-07"

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The installer's dialogs: a welcome page, the page that asks which server to
+  connect the station to, then the standard progress and exit pages.
+
+  Built from the WiX UI extension's own dialogs (WelcomeDlg has no licence page)
+  with one dialog of ours, ConnectionDlg, between the welcome page and the
+  install. All three of its fields are optional: an administrator may leave them
+  empty and connect the station from "Warden Agent — настройка" (the Start
+  menu) afterwards. The page is skipped on an upgrade, which must not ask about
+  or change the connection, and is never reached on a repair or a removal.
+
+  Untested on a real Windows machine, like the rest of this installer; see
+  the comment in Product.wxs and constitution Section VI.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Fragment>
+    <UI Id="WixUI_Warden">
+      <TextStyle Id="WixUI_Font_Normal" FaceName="Tahoma" Size="8" />
+      <TextStyle Id="WixUI_Font_Bigger" FaceName="Tahoma" Size="12" />
+      <TextStyle Id="WixUI_Font_Title" FaceName="Tahoma" Size="9" Bold="yes" />
+
+      <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
+
+      <DialogRef Id="ErrorDlg" />
+      <DialogRef Id="FatalError" />
+      <DialogRef Id="FilesInUse" />
+      <DialogRef Id="MsiRMFilesInUse" />
+      <DialogRef Id="PrepareDlg" />
+      <DialogRef Id="ProgressDlg" />
+      <DialogRef Id="ResumeDlg" />
+      <DialogRef Id="UserExit" />
+      <DialogRef Id="WelcomeDlg" />
+
+      <Dialog Id="ConnectionDlg" Width="370" Height="270" Title="Warden Agent — подключение к серверу">
+        <Control Id="Title" Type="Text" X="15" Y="10" Width="340" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Подключение к серверу" />
+        <Control Id="Description" Type="Text" X="15" Y="30" Width="340" Height="40" Transparent="yes" NoPrefix="yes" Text="Укажите сервер Warden и токен регистрации, выпущенный администратором в панели (раздел «Станции»). Всё это можно оставить пустым и подключить станцию позже: пункт «Warden Agent — настройка» в меню «Пуск»." />
+
+        <Control Id="ServerLabel" Type="Text" X="15" Y="82" Width="340" Height="10" Transparent="yes" NoPrefix="yes" Text="Адрес сервера" />
+        <Control Id="ServerEdit" Type="Edit" X="15" Y="94" Width="340" Height="15" Property="SERVER_URL" Sunken="yes" />
+
+        <Control Id="TokenLabel" Type="Text" X="15" Y="120" Width="340" Height="10" Transparent="yes" NoPrefix="yes" Text="Токен регистрации" />
+        <Control Id="TokenEdit" Type="Edit" X="15" Y="132" Width="340" Height="15" Property="ENROLLMENT_TOKEN" Password="yes" Sunken="yes" />
+
+        <Control Id="FingerprintLabel" Type="Text" X="15" Y="158" Width="340" Height="20" Transparent="yes" NoPrefix="yes" Text="Отпечаток SHA-256 сертификата сервера (если сервер выдаёт себе сертификат сам; он показан в панели рядом с токеном)" />
+        <Control Id="FingerprintEdit" Type="Edit" X="15" Y="180" Width="340" Height="15" Property="SERVER_CA_SHA256" Sunken="yes" />
+
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="373" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="Назад">
+          <Publish Event="NewDialog" Value="WelcomeDlg" />
+        </Control>
+        <Control Id="Install" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="Установить">
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Отмена">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+      </Dialog>
+
+      <!-- A first install goes on to the connection page; an upgrade installs at once. -->
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="ConnectionDlg" Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED" Order="2" />
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="EndDialog" Value="Return" Condition="NOT Installed AND WIX_UPGRADE_DETECTED" Order="3" />
+
+      <!-- The last page offers to open the window, so the connection can be finished at once. -->
+      <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Открыть «Warden Agent — настройка»" />
+      <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchConfigurator" Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />
+
+      <Property Id="ARPNOMODIFY" Value="1" />
+    </UI>
+
+    <UIRef Id="WixUI_Common" />
+  </Fragment>
+</Wix>

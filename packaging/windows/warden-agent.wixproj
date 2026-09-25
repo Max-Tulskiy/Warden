@@ -8,6 +8,12 @@
       components in a 64-bit directory, which ICE80 validation refuses.
     -->
     <InstallerPlatform>x64</InstallerPlatform>
+    <!--
+      The installer has a wizard, and its standard pages come in the language of
+      the package: Russian (constitution principle 9). Product.wxs sets
+      Language="1049" to match.
+    -->
+    <Cultures>ru-RU</Cultures>
   </PropertyGroup>
 
   <!--
@@ -20,7 +26,8 @@
   <PropertyGroup>
     <WardenAgentExeFullPath>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(WardenAgentExePath)'))</WardenAgentExeFullPath>
     <WardenConfigExampleFullPath>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(WardenConfigExamplePath)'))</WardenConfigExampleFullPath>
-    <DefineConstants>$(DefineConstants);WardenVersion=$(WardenVersion);WardenAgentExePath=$(WardenAgentExeFullPath);WardenConfigExamplePath=$(WardenConfigExampleFullPath)</DefineConstants>
+    <WardenConfiguratorDirFullPath>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(WardenConfiguratorDirPath)'))</WardenConfiguratorDirFullPath>
+    <DefineConstants>$(DefineConstants);WardenVersion=$(WardenVersion);WardenAgentExePath=$(WardenAgentExeFullPath);WardenConfigExamplePath=$(WardenConfigExampleFullPath);WardenConfiguratorDirPath=$(WardenConfiguratorDirFullPath)</DefineConstants>
   </PropertyGroup>
 
   <!--
@@ -35,7 +42,8 @@
   </ItemGroup>
 
   <!--
-    WardenVersion/WardenAgentExePath/WardenConfigExamplePath are passed on
+    WardenVersion/WardenAgentExePath/WardenConfigExamplePath/WardenConfiguratorDirPath
+    (the folder the frozen connection window was built into) are passed on
     the command line by release.yml (`dotnet build -p:WardenVersion=...`),
     derived from the release tag, not hardcoded here, so this project
     file does not need editing for every release.

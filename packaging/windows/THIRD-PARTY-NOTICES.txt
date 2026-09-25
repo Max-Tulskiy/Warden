@@ -1,0 +1,19 @@
+Warden Agent -- third-party notices
+
+The Warden Agent connection window ("Warden Agent -- настройка", installed in
+the Configurator folder of the Warden Agent installation) is built with Qt for
+Python (PySide6), which is distributed under the GNU Lesser General Public
+License, version 3 (LGPLv3), with Qt itself under the same licence.
+
+The Qt libraries are installed as separate files in the Configurator folder, so
+they can be replaced by a compatible build of the same libraries. The source
+code of Qt and of Qt for Python is available from the Qt Project:
+
+    https://code.qt.io/cgit/pyside/pyside-setup.git/
+    https://download.qt.io/official_releases/qt/
+
+The full text of the LGPLv3 is at https://www.gnu.org/licenses/lgpl-3.0.html.
+
+The Python runtime and the other Python packages frozen into the agent are
+distributed under their own licences; see each package's distribution for its
+terms.

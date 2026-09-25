@@ -14,16 +14,72 @@
   warden_agent/service/windows.py (the pywin32 ServiceFramework entry
   point), not warden_agent/__main__.py, which is a plain blocking CLI that
   does not speak the Windows Service Control Manager's protocol at all.
+
+  The connection window is a second program, warden-agent-config.exe, frozen
+  from warden_agent/configurator/windows.py as a folder (Qt's libraries stay
+  separate, replaceable files) and installed under Configurator\. The wizard
+  page in ConnectionUI.wxs collects SERVER_URL, ENROLLMENT_TOKEN and
+  SERVER_CA_SHA256; the same properties can be given to a silent install. The
+  deferred action ApplyConnection hands them to the window's command line,
+  which enrolls the station; its result is ignored, so a station that could
+  not be connected is still installed, and the window finishes the job.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
     Name="Warden Agent"
     Manufacturer="Warden project"
+    Language="1049"
     Version="$(var.WardenVersion)"
     UpgradeCode="8f3d3f7a-6c3b-4b0e-9f7a-2c1e6b6b6f9a">
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of Warden Agent is already installed." />
     <MediaTemplate EmbedCab="yes" />
+
+    <!--
+      What the wizard collects, and what a silent install may be given:
+      msiexec /i warden-agent.msi /qn SERVER_URL=... ENROLLMENT_TOKEN=...
+      SERVER_CA_SHA256=... All three are secure, so they reach the elevated
+      part of the install from a non-elevated msiexec; the token is also
+      hidden, so a verbose installer log does not print it.
+    -->
+    <Property Id="SERVER_URL" Secure="yes" />
+    <Property Id="ENROLLMENT_TOKEN" Secure="yes" Hidden="yes" />
+    <Property Id="SERVER_CA_SHA256" Secure="yes" />
+
+    <!--
+      Enrolls the station after the files are in place and before the service
+      starts, so the service comes up already configured. Deferred and not
+      impersonated: it writes into a folder only SYSTEM and Administrators may
+      touch. The values are resolved into the command line when the action is
+      scheduled. Return="ignore": a failed connection never fails the
+      installation; the window is where it is finished. Skipped on an upgrade
+      and a repair, which must not ask about or change the connection.
+    -->
+    <CustomAction
+      Id="ApplyConnection"
+      FileRef="WardenAgentConfigExe"
+      ExeCommand="--apply --replace --no-restart --server &quot;[SERVER_URL]&quot; --token &quot;[ENROLLMENT_TOKEN]&quot; --ca-sha256 &quot;[SERVER_CA_SHA256]&quot;"
+      Execute="deferred"
+      Impersonate="no"
+      Return="ignore" />
+
+    <!-- Opens the window from the wizard's last page, as the installing user. -->
+    <CustomAction
+      Id="LaunchConfigurator"
+      FileRef="WardenAgentConfigExe"
+      ExeCommand=""
+      Execute="immediate"
+      Impersonate="yes"
+      Return="asyncNoWait" />
+
+    <InstallExecuteSequence>
+      <Custom
+        Action="ApplyConnection"
+        After="InstallFiles"
+        Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED AND SERVER_URL &lt;&gt; &quot;&quot;" />
+    </InstallExecuteSequence>
+
+    <UIRef Id="WixUI_Warden" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Warden Agent">
@@ -46,6 +102,39 @@
             Start="install"
             Stop="both"
             Remove="uninstall" />
+        </Component>
+
+        <Component Id="ThirdPartyNotices" Guid="4b0c2f6d-7a5e-4d13-9a8b-6e2d1c9f3a70">
+          <File Id="ThirdPartyNoticesTxt" Source="THIRD-PARTY-NOTICES.txt" KeyPath="yes" />
+        </Component>
+
+        <Directory Id="ConfiguratorFolder" Name="Configurator">
+          <!--
+            The frozen window is a folder, not one file: the Qt libraries stay
+            separate files that can be replaced (PySide6 is LGPLv3), and nothing
+            is unpacked into %TEMP% at every start. The executable is declared
+            on its own, since the shortcut and the actions above refer to it;
+            everything else beside it is taken as it is.
+          -->
+          <Component Id="ConfiguratorExecutable" Guid="c3a7e9d1-5b2f-4e68-8d40-1f9a6b7c2e85">
+            <File Id="WardenAgentConfigExe" Source="$(var.WardenConfiguratorDirPath)/warden-agent-config.exe" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="WardenMenuFolder" Name="Warden">
+        <Component Id="ConfiguratorShortcut" Guid="e5d1b8a2-9c4f-4a76-b3e0-2a8f7d6c1b94">
+          <!-- The executable asks for elevation, so opening this shows the UAC prompt. -->
+          <Shortcut
+            Id="ConfiguratorStartMenuShortcut"
+            Name="Warden Agent — настройка"
+            Description="Подключение станции к серверу Warden"
+            Target="[#WardenAgentConfigExe]"
+            WorkingDirectory="ConfiguratorFolder" />
+          <RemoveFolder Id="RemoveWardenMenuFolder" On="uninstall" />
+          <RegistryValue Root="HKLM" Key="Software\Warden\Agent" Name="ConfiguratorShortcut" Type="integer" Value="1" KeyPath="yes" />
         </Component>
       </Directory>
     </StandardDirectory>
@@ -100,8 +189,19 @@
       </Directory>
     </StandardDirectory>
 
+    <!-- Everything beside the executable in the frozen window's folder. -->
+    <ComponentGroup Id="ConfiguratorFiles" Directory="ConfiguratorFolder">
+      <Files Include="$(var.WardenConfiguratorDirPath)/**">
+        <Exclude Files="$(var.WardenConfiguratorDirPath)/warden-agent-config.exe" />
+      </Files>
+    </ComponentGroup>
+
     <Feature Id="MainFeature" Title="Warden Agent" Level="1">
       <ComponentRef Id="ServiceExecutable" />
+      <ComponentRef Id="ThirdPartyNotices" />
+      <ComponentRef Id="ConfiguratorExecutable" />
+      <ComponentRef Id="ConfiguratorShortcut" />
+      <ComponentGroupRef Id="ConfiguratorFiles" />
       <ComponentRef Id="AgentDataFolder" />
       <ComponentRef Id="DefaultConfig" />
     </Feature>
