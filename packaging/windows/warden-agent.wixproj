@@ -2,6 +2,12 @@
   <PropertyGroup>
     <OutputName>warden-agent</OutputName>
     <OutputType>Package</OutputType>
+    <!--
+      Product.wxs installs under ProgramFiles64Folder and ships a 64-bit
+      frozen agent; a package left at the default x86 platform has 32-bit
+      components in a 64-bit directory, which ICE80 validation refuses.
+    -->
+    <InstallerPlatform>x64</InstallerPlatform>
   </PropertyGroup>
 
   <!--
