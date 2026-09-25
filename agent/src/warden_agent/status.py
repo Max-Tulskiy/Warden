@@ -8,7 +8,6 @@ Russian wording, and nothing here can leak a token or a key.
 
 import json
 import logging
-import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,6 +17,7 @@ from pydantic import BaseModel, ValidationError
 
 from warden_agent.core.transport import FailureKind
 from warden_agent.errors import WaitReason
+from warden_agent.fileio import write_atomically
 
 logger = logging.getLogger(__name__)
 
@@ -80,13 +80,10 @@ class StatusStore:
 
     def _write(self, status: AgentStatus) -> None:
         self._status = status
-        temporary = self._path.with_name(self._path.name + ".tmp")
         try:
-            temporary.write_text(status.model_dump_json(), encoding="utf-8")
-            os.replace(temporary, self._path)
+            write_atomically(self._path, status.model_dump_json())
         except OSError:
             # A reader holding the file can make the replace fail on Windows.
             # The status is a courtesy to the window; it must never stop the
             # agent, so the next change simply tries again.
             logger.warning("could not write the status file %s", self._path)
-            temporary.unlink(missing_ok=True)

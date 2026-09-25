@@ -8,11 +8,11 @@ is refused rather than silently lost.
 """
 
 import json
-import os
-import shutil
 import tomllib
 from pathlib import Path
 from typing import Any
+
+from warden_agent.fileio import write_atomically
 
 #: The order the known keys are written in, each with the comment above it.
 _KNOWN: dict[str, str] = {
@@ -51,6 +51,17 @@ def read_config(path: Path) -> dict[str, Any]:
     return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
+def check_writable(values: dict[str, Any]) -> None:
+    """Raise `UnsupportedConfigError` if `write_config` would refuse `values`.
+
+    Lets a caller find out before it does something it cannot take back, such
+    as spending a one-time token.
+    """
+    for key, value in values.items():
+        if key not in _NEVER_WRITTEN:
+            _toml_value(key, value)
+
+
 def write_config(path: Path, values: dict[str, Any]) -> None:
     """Replace the file with `values`, atomically, or leave it as it was."""
     lines = [_HEADER]
@@ -64,16 +75,7 @@ def write_config(path: Path, values: dict[str, Any]) -> None:
         else:
             lines.append("\n")
         lines.append(f"{key} = {_toml_value(key, values[key])}\n")
-    text = "".join(lines)
-
-    temporary = path.with_name(path.name + ".tmp")
-    try:
-        temporary.write_text(text, encoding="utf-8")
-        if path.exists():
-            shutil.copymode(path, temporary)
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    write_atomically(path, "".join(lines))
 
 
 def _toml_value(key: str, value: Any) -> str:
