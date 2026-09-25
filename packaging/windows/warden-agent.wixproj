@@ -13,9 +13,11 @@
     <DefineConstants>$(DefineConstants);WardenVersion=$(WardenVersion);WardenAgentExePath=$(WardenAgentExePath);WardenConfigExamplePath=$(WardenConfigExamplePath)</DefineConstants>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Compile Include="Product.wxs" />
-  </ItemGroup>
+  <!--
+    Product.wxs is not listed as a Compile item: the WiX SDK already takes
+    every *.wxs under the project directory, and a second entry compiles
+    the same package twice ("Multiple entry sections").
+  -->
 
   <ItemGroup>
     <PackageReference Include="WixToolset.UI.wixext" Version="5.0.0" />
