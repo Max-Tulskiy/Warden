@@ -256,7 +256,8 @@ the proxy; newest-first order; the `operator` group and the exact code
 `operator.login` (without `operator.login_failed`); a partial code returning
 nothing; an actor combined with a group; a station id as the actor; paging with no
 gaps or repeats; 422 for a reversed range and for `%` in the action; 401 without a
-token; a 30-day range; and no new entries after reading the log. With 600 rejected
+token; a 30-day range; and no new entries after reading the log (true until
+`specs/008-read-audit/`: reading the log is now recorded). With 600 rejected
 logins the first page is exactly 500 rows, "Показать ещё" loads the rest with no
 repeats, and the button then disappears. In a real browser (Chromium driven by
 Playwright): a hostname is shown instead of a station id, the `<img ...>` text is
@@ -379,3 +380,27 @@ constitution principle 7 treats that as sufficient.
 This is not an oversight -- it follows directly from constitution principle
 10 ("honesty about boundaries"): naming the actual level of confidence beats
 leaving the impression that both platforms were checked equally.
+
+Separately, for the recording of views (`specs/008-read-audit/`): recording and the
+"Журнал" (audit log) screen were walked through by hand on a real stack
+(`docker compose`: Caddy + PostgreSQL 16, a separate project with fresh volumes, the
+proxy on non-standard ports), with a script standing in for the stations. An administrator and an
+observer opened the daily report, the cross-station report, and the configuration-change
+history, and the observer also a second page of a report. Querying `audit_log` directly
+in PostgreSQL showed exactly eight `view.*` entries with the right actors, targets, and
+parameters, including the `offset` of the second page and the entry for reading the log
+itself. The station list, the policy, the list of operators, and `GET /api/v1/auth/me`
+added nothing, and neither did the refusals: 401 without a session, 403 for an observer
+on the log, and 422 for a reversed range. In the browser (Chromium driven by Playwright):
+an observer has no "Журнал" item; for an administrator the hint under the filters says
+views are recorded and that the station list, the policy, and the list of operators are
+not; the action filter has the group "Просмотры данных" (data views) and four single
+actions under Russian names; filtering by the group shows only views, including the
+observer's under the observer's name, with the station named by its hostname; the group
+"Все действия операторов" (all operator actions) shows no views; and there are no
+console errors. Opening a station's page in the panel gives one entry for the daily
+report and one for the change history: the panel does not repeat those requests on a
+timer. What this does **not** prove: how the log behaves under a large number of views
+(there is no retention or pruning, and a row per view); a failed write on a real
+database (only `pytest` with the write replaced covers it); and there was only one
+browser -- Chromium.
