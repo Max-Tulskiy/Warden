@@ -38,6 +38,10 @@ const EMITTED_ACTIONS = [
   "policy.changed",
   "policy.reset",
   "request.window",
+  "view.daily_report",
+  "view.fleet_report",
+  "view.inventory_changes",
+  "view.audit_log",
 ];
 
 describe("actionLabel", () => {
@@ -62,17 +66,24 @@ describe("actionLabel", () => {
 });
 
 describe("filter choices", () => {
-  it("offers the five groups the server's codes fall into", () => {
+  it("offers the six groups the server's codes fall into", () => {
     expect(ACTION_GROUPS.map((group) => group.value)).toEqual([
       "operator",
       "agent",
       "enrollment_token",
       "request",
       "policy",
+      "view",
     ]);
     for (const group of ACTION_GROUPS) {
       expect(group.label).toMatch(/[А-Яа-яЁё]/);
     }
+  });
+
+  it("names the views group so an administrator can list only views", () => {
+    expect(ACTION_GROUPS.find((group) => group.value === "view")?.label).toBe(
+      "Просмотры данных",
+    );
   });
 
   it("offers every known action as a single choice, with its name", () => {

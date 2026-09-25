@@ -25,8 +25,8 @@
 
 ## Panel (R-8; A-12)
 
-- [ ] T-7. Tests, failing first, in `web/tests/unit/audit.test.ts` and `web/tests/unit/auditPage.test.tsx`: the four `view.*` codes have Russian labels; `ACTION_GROUPS` contains a `view` group labelled «Просмотры данных»; the hint under the filters no longer says reads are not recorded and says which views are recorded and which reads are not
-- [ ] T-8. In `web/src/lib/audit.ts` add the four labels and the `view` group, and in `web/src/pages/AuditPage.tsx` rewrite the hint; T-7 passes
+- [x] T-7. Tests, failing first, in `web/tests/unit/audit.test.ts` and `web/tests/unit/auditPage.test.tsx`: the four `view.*` codes have Russian labels; `ACTION_GROUPS` contains a `view` group labelled «Просмотры данных»; the hint under the filters no longer says reads are not recorded and says which views are recorded and which reads are not
+- [x] T-8. In `web/src/lib/audit.ts` add the four labels and the `view` group, and in `web/src/pages/AuditPage.tsx` rewrite the hint; T-7 passes
 
 ## Documentation (R-9)
 

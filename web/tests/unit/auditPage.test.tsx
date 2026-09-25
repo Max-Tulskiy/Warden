@@ -312,13 +312,28 @@ describe("AuditPage states", () => {
     expect(await screen.findByText("Не удалось загрузить журнал")).toBeInTheDocument();
   });
 
-  it("always states what the log does not record", async () => {
+  it("always states what the log records and what it does not", async () => {
     stubApi();
 
     renderAuditPage();
 
-    expect(screen.getByText(/не чтение данных/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/просмотры собранных данных и самого журнала/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Не фиксируются просмотр списка станций, политики и списка операторов/,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText(/не защищён от правки/)).toBeInTheDocument();
+  });
+
+  it("no longer claims that reads are not recorded", async () => {
+    stubApi();
+
+    renderAuditPage();
+
+    expect(screen.queryByText(/не чтение данных/)).not.toBeInTheDocument();
   });
 });
 

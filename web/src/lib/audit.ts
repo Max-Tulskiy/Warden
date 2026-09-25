@@ -31,6 +31,10 @@ const ACTION_LABELS: Record<string, string> = {
   "request.window": "Запрос окна данных у станции",
   "policy.changed": "Изменена политика сервера",
   "policy.reset": "Политика сброшена к значениям сервера",
+  "view.daily_report": "Просмотр отчёта за день",
+  "view.fleet_report": "Просмотр сводного отчёта по станциям",
+  "view.inventory_changes": "Просмотр истории изменений конфигурации",
+  "view.audit_log": "Просмотр журнала аудита",
 };
 
 /**
@@ -43,6 +47,7 @@ export const ACTION_GROUPS: { value: string; label: string }[] = [
   { value: "enrollment_token", label: "Токены регистрации" },
   { value: "request", label: "Запросы окон" },
   { value: "policy", label: "Изменения политики" },
+  { value: "view", label: "Просмотры данных" },
 ];
 
 /** Every known action as a single filter choice. */
