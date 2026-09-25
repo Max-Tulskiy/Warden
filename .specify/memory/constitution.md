@@ -1,6 +1,6 @@
 # Warden Project Constitution
 
-**Version:** 1.3.2 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-25
+**Version:** 1.4.0 · **Adopted:** 2026-09-15 · **Last amended:** 2026-09-25
 
 This document defines the project's purpose, mandatory development principles,
 its structure, and the decisions already made. The constitution takes priority
@@ -412,6 +412,40 @@ a cache that a save must invalidate (wrong across several processes); ending
 existing sessions when the session length is shortened (D-9 already gives a
 deliberate way to do that).
 
+### D-12. A view of collected data, or of the log, is recorded before it is answered
+
+An operator's view of what the complex has collected is an action of the kind
+principle 8 lists: who looked, and at what, is part of the accountability the log
+exists for. The daily report of a station, the cross-station report, a station's
+inventory-change history, and the audit log itself are recorded, under codes in
+one group, `view`, kept apart from the `operator` group of sign-ins and account
+changes so an administrator can list the views alone or everything but them. An
+entry names the caller, the station (or a fixed word for a view that spans
+stations or is of the log itself), and the request's own parameters, which
+include the page when it is not the first. Administrators and observers are
+recorded alike.
+
+The handler that serves a view writes and commits the entry before it reads any
+data. A view is therefore never answered without its entry: if the entry cannot be
+stored, the request fails and returns nothing. The entry for a view can appear in
+that view's own result. A request refused for a missing session, a role that is
+not allowed, or invalid parameters is not a view and leaves no entry.
+
+Not recorded: the station list, the operating policy, the list of operators, and
+the session check. The panel fetches the station list as a helper on several
+screens, and an entry per call would bury the views that matter. The gap is
+stated in Section V.
+
+Considered and rejected: recording every operator read (the helper calls would
+outnumber the views); writing the entry after the data is read (a failed write
+would come after the disclosure, and the ORM's default of expiring rows on commit
+would turn a page of results into one reload per row); a middleware that records
+every `GET` (it cannot say what was viewed without parsing each route's
+parameters again, and it would include the reads decided out); a separate table
+for views (a second place to read for "who did what"); naming the entries under
+`operator` (it would fill the group an administrator watches for sign-ins and
+account changes).
+
 ---
 
 ## IV. Spec-driven development
@@ -510,9 +544,12 @@ What Warden does not do and does not promise:
   after an administrator saves, editing the configuration alone changes nothing
   for the three values;
 * **the audit log is not a complete record** — it records actions that change
-  something or authenticate someone. Reads (reports, station lists, the log
-  itself) are not recorded, and neither are the requests a disabled station's
-  agent keeps making, so a gap in the log is not proof that nothing was read;
+  something or authenticate someone, and views of the daily report, the
+  cross-station report, a station's inventory-change history, and the log itself
+  (D-12). Views of the station list, the operating policy, the list of operators,
+  and the session check are not recorded, and neither are refused requests to
+  view or the requests a disabled station's agent keeps making, so a gap in the
+  log is not proof that nothing was read;
 * **the audit log is append-only only by how the server code uses it** — the
   database has no trigger or permission that stops an account with write access
   to PostgreSQL from altering or deleting rows, so the log is not tamper-evident.
@@ -564,3 +601,4 @@ What Warden does not do and does not promise:
 | 1.3.0 | 2026-09-24 | MINOR: added decision D-11 (the request window limit, the enrollment token lifetime, and the session lifetime are stored as one saved set, edited by administrators within fixed bounds, and read afresh at every use; the four-hour window ceiling is a constant in code and the server's configuration is the default) and three Section V boundaries that come with it: a change applies only from the next use, one policy serves the whole deployment with the audit log as its only history, and a saved policy outranks the configuration until it is reset. See `specs/006-editable-policy/` |
 | 1.3.1 | 2026-09-25 | PATCH: Section V lost the boundary noting that overlapping window requests could store the same event twice — `specs/007-event-deduplication/` closes it: ingestion now stores an event once per station, matched on category, timestamp, and payload. No principle or decision changed |
 | 1.3.2 | 2026-09-25 | PATCH: Section IV no longer asks for a git branch per spec; work is committed straight to `main`. The spec template's branch field and the workflow commands that offered a branch or looked one up were brought in line. No principle or decision changed |
+| 1.4.0 | 2026-09-25 | MINOR: added decision D-12 (a view of the daily report, the cross-station report, a station's inventory-change history, or the audit log is recorded under its own `view` group, written before the data is read so that a view is never answered without its entry; the station list, the policy, the list of operators, and the session check are not recorded) and rewrote the Section V boundary that said reads are not recorded. See `specs/008-read-audit/` |

@@ -34,7 +34,7 @@
 - [ ] T-10. Mirror T-9 in `docs/en/architecture.md`, same section and same statements
 - [ ] T-11. Update `docs/ru/usage.md`: the audit log paragraph describes the views group and that the entry for the view on screen can appear in its own result; leave the honest-status paragraph for T-19
 - [ ] T-12. Mirror T-11 in `docs/en/usage.md`
-- [ ] T-13. Amend `.specify/memory/constitution.md` to 1.4.0 (MINOR) through the Section VII procedure: add decision D-12 (views of collected data and of the log are recorded, before they are answered, under their own group; the station list, the policy, the list of operators, and the session check are not), rewrite the Section V boundary on unrecorded reads, add a version-history row, and update the "last amended" date; the documents made stale by it are those covered by T-9…T-12
+- [x] T-13. Amend `.specify/memory/constitution.md` to 1.4.0 (MINOR) through the Section VII procedure: add decision D-12 (views of collected data and of the log are recorded, before they are answered, under their own group; the station list, the policy, the list of operators, and the session check are not), rewrite the Section V boundary on unrecorded reads, add a version-history row, and update the "last amended" date; the documents made stale by it are those covered by T-9…T-12
 
 ## Verification
 
