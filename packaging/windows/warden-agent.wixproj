@@ -13,10 +13,14 @@
   <!--
     A property given as -p:Name=value is only an MSBuild property. Product.wxs
     reads $(var.Name), a WiX preprocessor variable, and those come from
-    DefineConstants alone, so each value is handed over here by name.
+    DefineConstants alone, so each value is handed over here by name. The
+    two file paths are made absolute against this project's directory, so
+    they do not depend on which directory the WiX tools resolve them from.
   -->
   <PropertyGroup>
-    <DefineConstants>$(DefineConstants);WardenVersion=$(WardenVersion);WardenAgentExePath=$(WardenAgentExePath);WardenConfigExamplePath=$(WardenConfigExamplePath)</DefineConstants>
+    <WardenAgentExeFullPath>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(WardenAgentExePath)'))</WardenAgentExeFullPath>
+    <WardenConfigExampleFullPath>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(WardenConfigExamplePath)'))</WardenConfigExampleFullPath>
+    <DefineConstants>$(DefineConstants);WardenVersion=$(WardenVersion);WardenAgentExePath=$(WardenAgentExeFullPath);WardenConfigExamplePath=$(WardenConfigExampleFullPath)</DefineConstants>
   </PropertyGroup>
 
   <!--
